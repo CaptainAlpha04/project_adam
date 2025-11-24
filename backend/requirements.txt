@@ -1,0 +1,8 @@
+fastapi
+uvicorn
+gymnasium
+stable-baselines3
+numpy
+pandas
+python-socketio
+noise
