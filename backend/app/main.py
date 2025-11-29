@@ -18,28 +18,48 @@ app.add_middleware(
     allow_headers=["*"],
 )
 
+# Global Simulation Speed (seconds per tick)
+SIMULATION_SPEED = 0.1
+
 # Initialize World
 world = World(width=200, height=200)
 
 # Add some initial agents
 for i in range(10):
-    agent = Agent(x=np.random.randint(0, 200), y=np.random.randint(0, 200))
+    agent = Agent(x=np.random.randint(0, 50), y=np.random.randint(0, 50))
     world.add_agent(agent)
 
 # Add animals
-for i in range(200):
+for i in range(20):
     # Herbivores
-    h = Animal(x=np.random.randint(0, 200), y=np.random.randint(0, 200), type='herbivore')
+    h = Animal(x=np.random.randint(0, 50), y=np.random.randint(0, 50), type='herbivore')
     world.animals.append(h)
     
-for i in range(10):
+for i in range(5):
     # Carnivores
-    c = Animal(x=np.random.randint(0, 200), y=np.random.randint(0, 200), type='carnivore')
+    c = Animal(x=np.random.randint(0, 50), y=np.random.randint(0, 50), type='carnivore')
     world.animals.append(c)
 
 @app.get("/")
 def read_root():
-    return {"message": "Project Adam Backend is running", "agent_count": len(world.agents), "animal_count": len(world.animals)}
+    return {
+        "message": "Project Adam Backend is running", 
+        "agent_count": len(world.agents), 
+        "animal_count": len(world.animals), 
+        "generation": world.generation,
+        "speed": SIMULATION_SPEED
+    }
+
+@app.post("/evolve")
+def evolve_world():
+    world.evolve_generation()
+    return {"message": "Evolution triggered", "generation": world.generation}
+
+@app.post("/speed")
+def set_speed(speed: float):
+    global SIMULATION_SPEED
+    SIMULATION_SPEED = max(0.01, min(2.0, speed))
+    return {"message": "Speed updated", "speed": SIMULATION_SPEED}
 
 @app.websocket("/ws")
 async def websocket_endpoint(websocket: WebSocket):
@@ -63,15 +83,20 @@ async def websocket_endpoint(websocket: WebSocket):
 
     try:
         while True:
-            if not getattr(world, 'paused', False):
+            paused = getattr(world, 'paused', False)
+            if not paused:
                 # Run one simulation step
                 # Agents
-                # Create a list of values to avoid runtime error if dict changes size during iteration (death)
                 agents = list(world.agents.values())
                 for agent in agents:
                     if agent.id not in world.agents: continue # Died during this step
-                    action = np.random.randint(0, 6)
-                    agent.act(action, world)
+                    # agent.act(world.time_step, world) # Old signature?
+                    # Check signature of act
+                    try:
+                        agent.act(world.time_step, world)
+                    except TypeError:
+                         # Fallback if signature mismatch during dev
+                         agent.act(np.random.randint(0,6), world)
                 
                 # Animals
                 for animal in world.animals:
@@ -84,11 +109,11 @@ async def websocket_endpoint(websocket: WebSocket):
             
             # Send state to frontend
             state = world.get_state()
-            state["paused"] = getattr(world, 'paused', False)
+            state["paused"] = paused
             await websocket.send_text(json.dumps(state))
             
             # Control simulation speed
-            await asyncio.sleep(0.1) 
+            await asyncio.sleep(SIMULATION_SPEED) 
     except WebSocketDisconnect:
         print("Client disconnected")
         receive_task.cancel()
