@@ -92,6 +92,56 @@ const MapCanvas = ({ gameState, selectedAgentId, onSelectAgent }) => {
       });
     }
 
+    // 3.5. Draw Opinions (Social Network Overlay)
+    if (gameState.agents) {
+      // Map ID to agent for lines
+      const agentMap = new Map();
+      gameState.agents.forEach(a => agentMap.set(a.id, a));
+
+      gameState.agents.forEach(agent => {
+        if (!agent.opinions) return;
+
+        Object.entries(agent.opinions).forEach(([targetId, score]) => {
+          if (Math.abs(score) < 0.1) return; // Ignore weak opinions
+
+          const target = agentMap.get(targetId);
+          if (target) {
+            ctx.beginPath();
+            ctx.moveTo(agent.x * TILE_SIZE + TILE_SIZE / 2, agent.y * TILE_SIZE + TILE_SIZE / 2);
+            ctx.lineTo(target.x * TILE_SIZE + TILE_SIZE / 2, target.y * TILE_SIZE + TILE_SIZE / 2);
+
+            // Color: Green (Like) / Red (Dislike)
+            ctx.strokeStyle = score > 0
+              ? `rgba(74, 222, 128, ${Math.min(Math.abs(score), 0.8)})`
+              : `rgba(239, 68, 68, ${Math.min(Math.abs(score), 0.8)})`;
+
+            ctx.lineWidth = Math.max(0.5, Math.abs(score) * 1.5);
+            ctx.stroke();
+          }
+        });
+
+        // Visualize Interactions (Hearts/Swords)
+        if (agent.state && agent.state.last_interaction) {
+          const li = agent.state.last_interaction;
+          // Only show recent interaction (e.g. within last 10 ticks) - Backend needs to clear it or we just show it? 
+          // The timestamp check is needed if we want it to fade. For now showing static.
+          const partner = agentMap.get(li.partner);
+          if (partner && (li.type === 'love' || li.type === 'combat' || li.type === 'reproduce')) {
+            const mx = (agent.x + partner.x) / 2 * TILE_SIZE + TILE_SIZE / 2;
+            const my = (agent.y + partner.y) / 2 * TILE_SIZE + TILE_SIZE / 2;
+
+            ctx.font = '10px Arial';
+            ctx.textAlign = 'center';
+            ctx.textBaseline = 'middle';
+
+            if (li.type === 'love') ctx.fillText('♥', mx, my);
+            else if (li.type === 'reproduce') ctx.fillText('★', mx, my);
+            else if (li.type === 'combat') ctx.fillText('⚔️', mx, my);
+          }
+        }
+      });
+    }
+
     // 4. Draw Agents
     if (gameState.agents) {
       gameState.agents.forEach(agent => {

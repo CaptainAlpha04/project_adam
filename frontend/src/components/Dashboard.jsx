@@ -39,13 +39,13 @@ const Dashboard = ({ gameState, onSelectAgent, selectedAgentId }) => {
 
                     {/* Speed Controls */}
                     <div className="mt-2 flex gap-1">
-                        {[0.5, 0.1, 0.01].map((speed, idx) => (
+                        {[0.5, 0.1, 0.01, 0.002, 0.001].map((speed, idx) => (
                             <button
                                 key={speed}
                                 onClick={() => fetch(`http://localhost:8000/speed?speed=${speed}`, { method: 'POST' })}
                                 className="flex-1 bg-blue-900 hover:bg-blue-800 text-blue-200 border border-blue-600 px-1 py-1 rounded transition-colors uppercase tracking-widest text-[10px] font-bold"
                             >
-                                {idx === 0 ? 'Slow' : idx === 1 ? 'Normal' : 'Fast'}
+                                {idx === 0 ? 'Slow' : idx === 1 ? 'Normal' : idx === 2 ? 'Fast' : idx === 3 ? '50x' : '100x'}
                             </button>
                         ))}
                     </div>
