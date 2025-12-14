@@ -4,87 +4,39 @@ import uuid
 import numpy as np
 from enum import Enum
 
+# --- Enums & Constants ---
+
 class GameStrategy(Enum):
     ALWAYS_COOPERATE = "Always Cooperate"
     ALWAYS_DEFECT = "Always Defect"
     TIT_FOR_TAT = "Tit for Tat"
+    TIT_FOR_TWO_TATS = "Tit for Two Tats"
     GRIM_TRIGGER = "Grim Trigger"
-    PAVLOV = "Pavlov" # Win-Stay, Lose-Shift
+    PAVLOV = "Pavlov" # Win-Stay, Lose-Switch
     RANDOM = "Random"
-    
-@dataclass
-class AgentAttributes:
-    name: str
-    gender: str # 'male', 'female'
-    personality_vector: Dict[str, float] # 20+ dimensions
-    generation: int = 1
-    partner_id: Optional[str] = None
-    friend_ids: List[str] = None
-    values: Dict[str, float] = None # Principles: {"Pacifism": 0.5, "Preservation": 0.8}
-    strategy: str = "Tit for Tat"
-
-    def __post_init__(self):
-        if self.friend_ids is None:
-            self.friend_ids = []
-        if self.values is None:
-            self.values = {}
-        # Strategy is assigned by Agent based on personality during init usually
-            
-    curiosity: float = 0.5 
-    honesty: float = 0.5
-    metabolism: float = 0.5
-    aggression: float = 0.1
-
-@dataclass
-class Soul:
-    id: str
-    memories: List['Memory']
-    karma: float = 0.0
-    past_lives: int = 0
-
-@dataclass
-class Memory:
-    type: str # 'event', 'location', 'social'
-    description: str
-    location: tuple # (x, y)
-    time: int
-    emotional_impact: float # -1.0 to 1.0
-    related_entity_id: Optional[str] = None
-
-@dataclass
-class AgentState:
-    hunger: float = 0.0
-    thirst: float = 0.0
-    happiness: float = 0.5
-    health: float = 1.0
-    busy_until: int = 0
-    last_interaction: Dict[str, Any] = field(default_factory=dict)
-
+    UNFORGIVING = "Unforgiving" # Same as Grim Trigger but stricter naming
+    PEACEMAKER = "Peacemaker" # Tit for Tat but periodically forgives
+    BULLY = "Bully" # Defect unless punished twice
 
 NAMES_MALE = [
     "Adam", "Bob", "Charlie", "David", "Ethan", "Frank", "George", "Henry", "Isaac", "Jack",
     "Liam", "Noah", "Oliver", "Elijah", "James", "William", "Benjamin", "Lucas", "Mason", "Logan",
-    "Alexander", "Sebastian", "Jack", "Aiden", "Owen", "Samuel", "Matthew", "Joseph", "Levi", "Mateo",
-    "Daniel", "Michael", "Jackson", "Viktor", "Harry", "Ron", "Albus", "Severus", "Draco", "Neville",
-    "Frodo", "Sam", "Merry", "Pippin", "Aragorn", "Legolas", "Gimli", "Boromir", "Gandalf", "Bilbo",
-    "Thor", "Loki", "Odin", "Tony", "Steve", "Bruce", "Clint", "Natasha", "Peter", "Stephen",
-    "Clark", "Bruce", "Diana", "Barry", "Arthur", "Victor", "Hal", "John", "Oliver", "Din",
-    "Luke", "Han", "Chewie", "Lando", "Kylo", "Finn", "Poe", "Anakin", "Obi-Wan", "Yoda",
-    "Mario", "Luigi", "Wario", "Waluigi", "Bowser", "Toad", "Yoshi", "Donkey", "Diddy", "Link",
-    "Zelda", "Ganon", "Kirby", "Fox", "Falco", "Slippy", "Peppy", "Wolf", "Captain", "Falcon"
+    "Alexander", "Sebastian", "Jack", "Aiden", "Owen", "Samuel", "Matthew", "Joseph", "Levi", "Mateo"
 ]
 
 NAMES_FEMALE = [
     "Alice", "Bella", "Clara", "Diana", "Eve", "Fiona", "Grace", "Hannah", "Ivy", "Julia",
     "Olivia", "Emma", "Ava", "Charlotte", "Sophia", "Amelia", "Isabella", "Mia", "Evelyn", "Harper",
-    "Camila", "Gianna", "Abigail", "Luna", "Ella", "Elizabeth", "Sofia", "Emily", "Avery", "Mila",
-    "Scarlett", "Eleanor", "Madison", "Layla", "Penelope", "Aria", "Chloe", "Grace", "Ellie", "Nora",
-    "Hermione", "Ginny", "Luna", "Minerva", "Molly", "Bellatrix", "Narcissa", "Lily", "Petunia", "Cho",
-    "Galadriel", "Arwen", "Eowyn", "Rosie", "Elanor", "Goldberry", "Lobelia", "Primula", "Melian", "Luthien",
-    "Natasha", "Wanda", "Carol", "Hope", "Peggy", "Sharon", "Maria", "Monica", "Kamala", "Jennifer",
-    "Lois", "Selina", "Harley", "Pamela", "Barbara", "Cassandra", "Stephanie", "Kate", "Kara", "Mera",
-    "Leia", "Padme", "Rey", "Jyn", "Ahsoka", "Sabine", "Hera", "Rose", "Holdo", "Mon",
-    "Peach", "Daisy", "Rosalina", "Pauline", "Toadette", "Birdo", "Samus", "Zelda", "Sheik", "Midna"
+    "Camila", "Gianna", "Abigail", "Luna", "Ella", "Elizabeth", "Sofia", "Emily", "Avery", "Mila"
+]
+
+PERSONALITY_TRAITS = [
+    "Curiosity", "Survival", "Social", "Aggression", "Loyalty", 
+    "Independence", "Patience", "Impulsivity", "Creativity", "Logic", 
+    "Empathy", "Selfishness", "Bravery", "Caution", "Energy", 
+    "Laziness", "Lust", "Greed", "Altruism", "Resilience",
+    "Optimism", "Pessimism", "Ambition", "Modesty", "Humor",
+    "Seriousness", "Forgiveness", "Vengefulness", "Spirituality", "Skepticism"
 ]
 
 RECIPES = {
@@ -101,953 +53,1393 @@ RECIPES = {
     "Clothes": {"Leather": 3}
 }
 
-PERSONALITY_TRAITS = [
-    "Curiosity", "Survival", "Social", "Aggression", "Loyalty", 
-    "Independence", "Patience", "Impulsivity", "Creativity", "Logic", 
-    "Empathy", "Selfishness", "Bravery", "Caution", "Energy", 
-    "Laziness", "Lust", "Greed", "Altruism", "Resilience",
-    "Optimism", "Pessimism", "Ambition", "Modesty", "Humor",
-    "Seriousness", "Forgiveness", "Vengefulness", "Spirituality", "Skepticism"
-]
+# --- Data Structures ---
+
+@dataclass
+class Memory:
+    type: str # 'event', 'location', 'social', 'survival'
+    description: str
+    location: tuple # (x, y)
+    time: int
+    emotional_impact: float # -1.0 to 1.0
+    related_entity_id: Optional[str] = None
+
+@dataclass
+class Soul:
+    """The persistent spiritual kernel that transmigrates."""
+    id: str
+    memories: List[Memory]
+    karma: float = 0.0
+    past_lives: int = 0
+    wisdom_score: float = 0.0
+
+@dataclass
+class AgentAttributes:
+    name: str
+    gender: str
+    personality_vector: Dict[str, float]
+    generation: int = 1
+    partner_id: Optional[str] = None
+    friend_ids: List[str] = field(default_factory=list)
+    values: Dict[str, float] = field(default_factory=dict)
+    
+    # Social Hierarchy
+    leader_id: Optional[str] = None
+    followers: List[str] = field(default_factory=list)
+    ranking: float = 0.0 # Derived from influence
+    candidate_tribe_id: Optional[str] = None # For joining logic
+    tribe_id: Optional[str] = None
+    
+    # Social Hierarchy
+    leader_id: Optional[str] = None
+    followers: List[str] = field(default_factory=list)
+    ranking: float = 0.0 # Derived from influence
+    tribe_goal: str = "wander" # Deprecated, use Tribe.goal
+    
+    # Strategy
+    strategy: str = "Tit for Tat"
+    
+    # Derived shortcuts
+    curiosity: float = 0.5 
+    honesty: float = 0.5
+    aggression: float = 0.1
+
+@dataclass
+class AgentState:
+    health: float = 1.0
+    happiness: float = 0.5
+    experience: float = 0.0
+    busy_until: int = 0
+    last_interaction: Dict[str, Any] = field(default_factory=dict)
+    
+    # Social State
+    social_lock_target: Optional[str] = None
+    social_lock_steps: int = 0
+    
+    age_steps: int = 0
+    momentum_dir: tuple = (0, 0) # (dx, dy) for smoother wandering
+
+# --- THE TRI-PARTITE PROTOCOL ---
+
+class Nafs:
+    """
+    The Base Layer (The Reptile).
+    Responsible for Biological Survival, Hunger, Pain, and Reactive Defense.
+    """
+    def __init__(self, agent):
+        self.agent = agent
+        self.hunger: float = 0.0 # 0.0 Full -> 1.0 Starving
+        self.energy: float = 1.0 # 1.0 Rested -> 0.0 Exhausted
+        self.pain: float = 0.0
+        self.lust: float = 0.0
+        
+    def update(self, world):
+        # Biological Decay
+        self.hunger += 0.002
+        self.energy -= 0.0002
+        if self.agent.state.health > 0.8:
+            self.lust += 0.005 # Grows faster than hunger if healthy
+        
+        # Health Impact
+        if self.hunger > 0.8:
+            drain = 0.01 if self.hunger <= 0.95 else 0.05
+            self.agent.state.health -= drain
+            if np.random.random() < 0.05:
+                self.agent.log_diary("My stomach screams in agony.")
+
+    def check_survival_instinct(self, world) -> Optional[Dict]:
+        """
+        Overrides higher functions if immediate survival is threatened.
+        Returns an Action Plan if override is necessary.
+        """
+        # 1. Flee Predators (Immediate)
+        nearby_threats = [a for a in world.animals if a.type == 'carnivore' and self.agent.distance_to(a) < 15]
+        if nearby_threats:
+            self.agent.log_diary("NAFS TAKEOVER: Fleeing predator!")
+            return {'action': 'flee', 'target': nearby_threats[0]}
+
+        # 2. Starvation Panic
+        if self.hunger > 0.9:
+            # Check for food in inventory
+            if self.agent.eat_from_inventory():
+                return None # Crisis averted
+            
+            # Panic Search
+            self.agent.log_diary("NAFS TAKEOVER: Starvation Imminent!")
+            return {'action': 'panic_search', 'target': None}
+            
+        return None
+
+class Qalb:
+    """
+    The Middle Layer (The Heart/Ego).
+    Responsible for Society, Emotion, Mediation, and Daily Logic.
+    """
+    def __init__(self, agent):
+        self.agent = agent
+        self.social: float = 1.0 # 1.0 Connected -> 0.0 Lonely
+        self.fun: float = 1.0    # 1.0 Entertained -> 0.0 Bored
+        self.emotional_state: str = "Neutral"
+        self.opinions: Dict[str, float] = {} # agent_id -> -1.0 to 1.0
+        self.social_memory: Dict[str, str] = {} # agent_id -> 'cooperate' or 'defect' (Last move they made against me)
+        self.history: Dict[str, List[str]] = {} # agent_id -> List of past moves for complex strategies
+        self.social_cooldowns: Dict[str, int] = {} # agent_id -> timestamp when cooldown expires
+        
+        # Social goals
+        
+        # Social goals
+        self.current_social_target: Optional[str] = None
+        self.brain = None # RL Model
+
+    def load_brain(self, path):
+        try:
+            from stable_baselines3 import PPO
+            self.brain = PPO.load(path)
+            print(f"Agent {self.agent.attributes.name} loaded brain from {path}")
+        except Exception as e:
+            print(f"Failed to load brain: {e}")
+
+    def update(self, world):
+        self.social -= 0.0005
+        self.fun -= 0.0005
+        
+        # Mood Calculation
+        if self.agent.state.happiness > 0.7: self.emotional_state = "Happy"
+        elif self.agent.state.happiness < 0.3: self.emotional_state = "Depressed"
+        elif self.social < 0.2: self.emotional_state = "Lonely"
+        else: self.emotional_state = "Neutral"
+
+    def propose_action(self, world) -> Dict:
+        """
+        Calculates Desires based on Internal State and Personality.
+        This is not a hardcoded utility function. It is a 'Feeling' generator.
+        """
+        # DEBUG LOG
+        # print(f"Agent {self.agent.id[:4]} Proposing Action...")
+        # 0. SOCIAL LOCK (Chat Loop)
+        if self.agent.state.social_lock_target and self.agent.state.social_lock_steps > 0:
+             self.agent.log_diary("DEBUG: Stuck in Social Lock")
+             return {'action': 'continue_social', 'target': self.agent.state.social_lock_target, 'desc': "Deep in conversation."}
+
+        # 0. BRAIN OVERRIDE (The Intuition)
+        # if self.brain:
+            # self.agent.log_diary("DEBUG: Brain Override")
+            # obs = self.agent.get_observation(world)
+            # action_idx, _ = self.brain.predict(obs)
+            # action_idx = int(action_idx)
+            # if action_idx == 0: return {'action': 'wait', 'desc': 'Thinking...'}
+            # if action_idx == 1: return {'action': 'step_y', 'val': -1, 'desc': 'Moving Up'}
+            # if action_idx == 2: return {'action': 'step_y', 'val': 1, 'desc': 'Moving Down'}
+            # if action_idx == 3: return {'action': 'step_x', 'val': -1, 'desc': 'Moving Left'}
+            # if action_idx == 4: return {'action': 'step_x', 'val': 1, 'desc': 'Moving Right'}
+            # if action_idx == 5: return {'action': 'interact', 'desc': 'interacting'}
+
+        p = self.agent.attributes.personality_vector
+
+        # --- THE DESIRE SYSTEM ---
+        # Instead of 'Utility', we use 'Desire Strength' (0.0 to 1.0)
+        # Desires are emergent from Needs + Personality
+        
+        desires = {}
+
+        # 1. Desire for Sustenance (Nafs + Conscientiousness)
+        # "I feel hunger."
+        # Logic: Hunger * (1 + 0.5 * Survival_Instinct)
+        # Plan Ahead: If Conscientious, add weight to future hunger prediction
+        predicted_hunger = self.agent.nafs.hunger + (0.1 if p.get("Conscientiousness", 0.5) > 0.6 else 0.0)
+        desires["Eat"] = min(1.0, predicted_hunger * (1.2 + p["Survival"]))
+
+        # 2. Desire for Connection (Social + Extroversion + Boredom)
+        # "I feel lonely OR bored."
+        
+        extroversion = p["Social"]
+        loneliness = 1.0 - self.social
+        boredom = 1.0 - self.fun
+        
+        # Base Desire
+        if extroversion > 0.7:
+             desire_social = (loneliness ** 0.5) + (boredom * 0.5)
+        else:
+             desire_social = (loneliness ** 2.0) + (boredom * 0.2)
+        
+        # OPPORTUNITY BONUS
+        # If I see someone close, it's "Cheap" to socialize.
+        nearest_agent_dist = 999.0
+        for other in world.agents.values():
+             if other.id == self.agent.id: continue
+             d = self.agent.distance_to(other)
+             if d < nearest_agent_dist: nearest_agent_dist = d
+        
+        if nearest_agent_dist < 5.0:
+             desire_social += 0.7 # Interaction is irresistible when close
+             # Work dampening applied after work calculation
+        
+        desires["Socialize"] = min(1.0, desire_social)
+        
+        # 3. Desire for Lust (The Bridge)
+        # Driven by Nafs.lust + Libido (Lust trait)
+        libido = p["Lust"]
+        lust_drive = self.agent.nafs.lust * (1.0 + libido)
+        desires["Mating"] = min(1.0, lust_drive)
+
+        # 4. Desire for Curiosity (Strangers)
+        # If I see a stranger (someone I have no opinion of), I want to know them.
+        # This solves "First Contact"
+        
+        # Scan immediate vicinity (Vision)
+        unknown_nearby = False
+        candidates = [] # For action targeting
+        
+        # We need to know who is nearby to check opinions
+        # Using World Access cheat for Efficiency (or could use spatial_memory['agent'])
+        # Let's use the 'candidates' from vision scan in propose_action? No, that's inside socialize.
+        # We need a quick check here.
+        
+        for other in world.agents.values():
+            if other.id == self.agent.id: continue
+            dist = self.agent.distance_to(other)
+            if dist < 15: # Visual range
+                 if other.id not in self.agent.qalb.opinions:
+                     unknown_nearby = True
+                     candidates.append(other)
+
+        if unknown_nearby:
+            # Curiosity Bonus
+            curiosity_drive = p["Curiosity"]
+            desires["Exploration"] = 0.5 + (curiosity_drive * 0.5) # Minimum 0.5 interest in strangers
+            # If High Extroversion + Curiosity, it's irrelevant of hunger almost
+            if p["Social"] > 0.6: desires["Exploration"] += 0.3
+            
+        else:
+            desires["Exploration"] = p["Curiosity"] * 0.3 # Just wandering check
+        
+        # 5. Desire for Rest (Energy) - DISABLED
+        # desires["Sleep"] = (1.0 - self.agent.nafs.energy) ** 1.5
+        desires["Sleep"] = 0.0
+
+        # 6. Desire for Achievement (Work)
+        # DAMPENER: If Inventory is full, stop working!
+        inventory_count = sum([s['count'] for s in self.agent.inventory])
+        saturation = min(1.0, inventory_count / 20.0) 
+        
+        if self.agent.nafs.energy > 0.6:
+            base_work_desire = p["Creativity"] * 0.8
+            desires["Work"] = base_work_desire * (1.0 - saturation)
+        else:
+            desires["Work"] = 0.0
+            
+        # DISTRACTION: If social opportunity is high, work less
+        if nearest_agent_dist < 5.0:
+            desires["Work"] *= 0.2
+
+        # --- ARBITRATION ---
+        
+        dominant_desire = max(desires, key=desires.get)
+        intensity = desires[dominant_desire]
+        
+        # DEBUG
+        if intensity > 0.0:
+            self.agent.log_diary(f"DEBUG: Desire {dominant_desire} ({intensity:.2f})")
+            pass
+
+        # REPRODUCTION (Opportunistic Override)
+        if self.agent.state.happiness > 0.6 and self.agent.attributes.partner_id:
+             if self.agent.nafs.energy > 0.4:
+                 return {'action': 'reproduce', 'desc': "Expanding the bloodline."}
+
+        # ACTION MAPPING
+        if dominant_desire == "Eat":
+            if intensity > 0.2: 
+                return {'action': 'find_resource', 'resource': 'consumable', 'desc': "Seeking sustenance."}
+        
+        elif dominant_desire == "Mating":
+            # Seek ANY partner, preferably opposite gender, or just socialize aggressively
+            # For now, map to 'socialize' but with high priority
+            if intensity > 0.4:
+                 return {'action': 'socialize', 'desc': "Driven by biological urge."}
+                 
+        elif dominant_desire == "Exploration":
+            # If stranger nearby, go towards them
+            if unknown_nearby:
+                 return {'action': 'socialize', 'desc': "Investigating stranger."}
+            else:
+                 return {'action': 'wander', 'desc': "Exploring the unknown."}
+
+        elif dominant_desire == "Sleep":
+            if intensity > 0.6: 
+                return {'action': 'sleep', 'desc': "Resting weary bones."}
+                
+        elif dominant_desire == "Socialize":
+            if intensity > 0.3:
+                return {'action': 'socialize', 'desc': "Seeking companionship."}
+                
+        elif dominant_desire == "Work":
+             return {'action': 'gather_materials', 'resource': 'material', 'desc': "Building legacy."}
+        
+        # Default
+        return {'action': 'wander', 'desc': "Contemplating existence."}
+
+class Ruh:
+    """
+    The High Layer (The Spirit).
+    Responsible for Life Goals, Wisdom, Karma, and Override.
+    """
+    def __init__(self, agent, soul: Optional[Soul] = None):
+        self.agent = agent
+        self.soul = soul if soul else Soul(id=str(uuid.uuid4()), memories=[])
+        self.life_goal: str = "Survival" # Default
+        self.wisdom: float = self.soul.wisdom_score
+        
+        self.determine_life_goal()
+
+    def determine_life_goal(self):
+        p = self.agent.attributes.personality_vector
+        if p["Greed"] > 0.7: self.life_goal = "Wealth"
+        elif p["Altruism"] > 0.7: self.life_goal = "Prophet"
+        elif p["Curiosity"] > 0.7: self.life_goal = "Sage"
+        elif p["Aggression"] > 0.7: self.life_goal = "Warlord"
+        else: self.life_goal = "Community"
+
+    def update_karma(self, amount: float):
+        self.soul.karma += amount
+        
+    def review_plan(self, plan: Dict, world) -> Dict:
+        """
+        The Conscience. Can veto or modify Qalb's plan.
+        """
+        # Example: If Qalb wants to Steal (not impl yet), Ruh might forbid it based on Karma.
+        # Example: If Life Goal is "Sage", bias towards exploration/knowledge.
+        
+        if self.life_goal == "Sage" and plan['action'] == 'wander':
+            # Upgrade wander to 'explore_new_zone'
+            return {'action': 'explore', 'desc': "Seeking wisdom in the unknown."}
+            
+        # Example Implementation of "Fasting" (Spiritual override)
+        # If today is a holy day (mock logic), refuse to eat? (Maybe too complex for now)
+        
+        return plan # Approve by default
+
+# --- MAIN AGENT CLASS ---
 
 class Agent:
     def __init__(self, x: int, y: int, name: str = None, gender: str = None, soul: Soul = None, birth_time: int = 0):
         self.id = str(uuid.uuid4())
         self.x = x
         self.y = y
-        
         self.birth_time = birth_time
         
-        if gender is None:
-            gender = np.random.choice(['male', 'female'])
+        # Identity
+        if gender is None: gender = np.random.choice(['male', 'female'])
+        if name is None: name = np.random.choice(NAMES_MALE if gender == 'male' else NAMES_FEMALE)
         
-        if name is None:
-            if gender == 'male':
-                name = np.random.choice(NAMES_MALE)
-            else:
-                name = np.random.choice(NAMES_FEMALE)
+        # Personality
+        p_vector = {trait: np.random.random() for trait in PERSONALITY_TRAITS}
         
-        # Personality Vector (20 dimensions)
-        personality_vector = {trait: np.random.random() for trait in PERSONALITY_TRAITS}
-        
-        self.attributes = AgentAttributes(name=name, 
-                                          gender=gender,
-                                          personality_vector=personality_vector,
-                                          generation=1,
-                                          curiosity=personality_vector["Curiosity"],
-                                          honesty=personality_vector["Altruism"], # Approx
-                                          aggression=personality_vector["Aggression"])
+        self.attributes = AgentAttributes(name=name, gender=gender, personality_vector=p_vector)
         self.state = AgentState()
-        self.inventory: List[Dict] = []
-        self.knowledge: List[str] = [] 
-        self.equipped_items: List[Dict] = [] 
         
-        # New Systems
-        # New Systems
-        self.memory: List[Memory] = [] # Structured memory
-        self.plan: List[Dict] = [] # Current plan: [{'action': 'move', 'target': (x,y)}, ...]
-        self.immediate_goal: str = "Idle"
-        self.short_term_goal: str = "Survive"
-        self.long_term_goal: str = "Thrive"
+        # Inventory & Knowledge
+        # Inventory & Knowledge
+        self.inventory: List[Dict] = [] # [{'item': ..., 'count': ...}]
+        self.knowledge: List[str] = []
+        self.diary: List[str] = []
+        self.visible_agents: List[str] = [] # List of names of currently seen agents
         
-        # Initialize Values based on Personality
-        self.attributes.values = {
-            "Pacifism": self.attributes.personality_vector.get("Agreeableness", 0.5),
-            "Preservation": self.attributes.personality_vector.get("Neuroticism", 0.5), # Fear drives preservation
-            "Curiosity": self.attributes.personality_vector.get("Openness", 0.5),
-            "Ambition": self.attributes.personality_vector.get("Conscientiousness", 0.5)
+        # Spatial Memory
+        
+        # Spatial Memory
+        # { 'food': [(x,y), (x,y)], 'water': [], 'agent': [(x,y,id)] }
+        self.spatial_memory: Dict[str, List[Tuple[int, int]]] = {
+            'food': [],
+            'wood': [],
+            'stone': [],
+            'agent': []
         }
-        self.traits: List[str] = self._derive_traits(self.attributes.personality_vector)
-        self.opinions: Dict[str, float] = {} # {agent_id: score (-1.0 to 1.0)}
         
-        # Movement tracking
+        # TRI-PARTITE SYSTEM
+        self.nafs = Nafs(self)
+        self.qalb = Qalb(self)
+        self.ruh = Ruh(self, soul)
+        
+        # Initialize attributes
+        self.attributes.curiosity = p_vector["Curiosity"]
+        self.attributes.honesty = p_vector["Altruism"]
+        self.attributes.aggression = p_vector["Aggression"]
+        
+        # Determine Game Strategy
+        self.determine_strategy()
+        
+        # Previous Agent compatibility
+        self.needs = self.nafs # Alias for simplicity if needed, but better to use .nafs explicitly
+        # But we need to expose needs.hunger etc for serialization 
+        
+        # Movement Memory
         self.last_x, self.last_y = x, y
-
-        # Samsara / Soul Logic
-        if soul:
-            self.soul_id = soul.id
-            self.memory = soul.memories
-            self.past_lives = soul.past_lives + 1
-            # Karma influence?
-            self.log_diary(f"I have awakened again. This is life #{self.past_lives}.")
-        else:
-            self.soul_id = str(uuid.uuid4())
-            self.past_lives = 0
-            
-    def get_age(self, current_time: int) -> int:
-        return current_time - self.birth_time
-
-    def create_soul(self) -> Soul:
-        """Extracts the soul from the dying agent."""
-        # Filter memories? For now keep all or last N
-        return Soul(
-            id=self.soul_id,
-            memories=self.memory[-50:], # Keep last 50 memories
-            karma=0.0, # TODO: Calculate karma
-            past_lives=self.past_lives
-        )
-
-    def _derive_traits(self, p: Dict[str, float]) -> List[str]:
-        traits = []
-        # Complex mappings
-        if p["Survival"] > 0.7 and p["Caution"] > 0.6: traits.append("Survivor")
-        if p["Social"] > 0.7 and p["Empathy"] > 0.7: traits.append("Empath")
-        if p["Aggression"] > 0.7 and p["Impulsivity"] > 0.6: traits.append("Hot-headed")
-        if p["Curiosity"] > 0.8 and p["Creativity"] > 0.7: traits.append("Inventor")
-        if p["Bravery"] > 0.8 and p["Altruism"] > 0.6: traits.append("Heroic")
-        if p["Logic"] > 0.8 and p["Patience"] > 0.7: traits.append("Strategist")
-        if p["Greed"] > 0.8 and p["Selfishness"] > 0.7: traits.append("Hoarder")
-        if p["Lust"] > 0.8 and p["Social"] > 0.6: traits.append("Flirtatious")
-        if p["Laziness"] > 0.8: traits.append("Sloth")
-        if p["Energy"] > 0.8: traits.append("Hyperactive")
+        self.plan_queue: List[Dict] = []
         
-        # Fallback basic traits if none complex found
-        if not traits:
-            if p["Social"] > 0.6: traits.append("Friendly")
-            elif p["Social"] < 0.4: traits.append("Loner")
-            if p["Curiosity"] > 0.6: traits.append("Curious")
-            
-        return traits
+        # Log birth
+        self.log_diary(f"I am born. I am {self.attributes.name}. My spirit goal is {self.ruh.life_goal}.")
+        if self.ruh.soul.past_lives > 0:
+            self.log_diary(f"I remember... this is life #{self.ruh.soul.past_lives + 1}.")
 
-    def to_dict(self):
+    # --- CORE LOOP ---
+
+    def act(self, step_count: int, world):
+        """
+        The Main Execution Cycle.
+        """
+        self.state.age_steps += 1
+        
+        # 1. Update Internal Systems
+        self.nafs.update(world)
+        self.qalb.update(world)
+        
+        # 1.5 Perception (Vision)
+        self.scan_surroundings(world)
+
+        # 2. Check Busy State
+        if world.time_step < self.state.busy_until:
+             # print(f"Agent {self.attributes.name} is busy until {self.state.busy_until} (Current: {world.time_step})")
+             self.log_diary(f"DEBUG: Busy until {self.state.busy_until}")
+             return # Busy doing something (sleeping, chatting)
+        
+        # print(f"Agent {self.attributes.name} acting at {world.time_step}")
+
+        # 3. Decision Pipeline
+        
+        # A. Nafs Override (Survival Instinct)
+        action_plan = self.nafs.check_survival_instinct(world)
+        
+        if action_plan:
+             self.log_diary(f"DEBUG: Nafs Override {action_plan['action']}")
+        
+        # B. Qalb Proposal (Rational/Social Mind)
+        if not action_plan:
+            action_plan = self.qalb.propose_action(world)
+            
+            # C. Ruh Review (Spiritual Veto/Modifier)
+            action_plan = self.ruh.review_plan(action_plan, world)
+            
+        # 4. Execution
+        self.execute_action(action_plan, world)
+        
+    def execute_action(self, plan: Dict, world):
+        """Dispatches the action."""
+        action = plan['action']
+        
+        if action == 'flee':
+            target = plan.get('target')
+            if target: self.flee(target, world)
+            
+        elif action == 'panic_search':
+            # Random move
+            self.move_random(world)
+            # Try gather
+            self.gather(world)
+            
+        elif action == 'wander':
+            self.move_random(world)
+            self.gather(world) # Opportunistic
+            
+        elif action == 'find_resource':
+            res_type = plan.get('resource')
+            # Check Memory
+            target = None
+            mem_type = 'food' if res_type == 'consumable' else 'wood' # simplified
+            
+            knowns = self.spatial_memory.get(mem_type, [])
+            if knowns:
+                # Find nearest known
+                # Sort by distance
+                knowns.sort(key=lambda p: (p[0]-self.x)**2 + (p[1]-self.y)**2)
+                target = knowns[0]
+                
+                # Go there
+                if (target[0]-self.x)**2 + (target[1]-self.y)**2 < 2:
+                    self.gather(world)
+                    # If empty, remove from memory
+                    if target not in world.items_grid:
+                        knowns.pop(0)
+                        self.move_random(world)
+                else:
+                    # dx, dy = target[0] - self.x, target[1] - self.y
+                    # mx = 1 if dx > 0 else -1 if dx < 0 else 0
+                    # my = 1 if dy > 0 else -1 if dy < 0 else 0
+                    # world.move_agent(self.id, mx, my)
+                    self.navigate_to(target[0], target[1], world)
+            else:
+                # Explore (Smart Wander)
+                self.move_random(world)
+                self.gather(world)
+            
+        elif action == 'sleep':
+            # NO SLEEPING. Wasting time.
+            # Redistribute energy magically or just ignore
+            self.nafs.energy = min(1.0, self.nafs.energy + 0.1) # Fast recharge
+            # Do something productive
+            self.move_random(world)
+            self.gather(world)
+            
+        elif action == 'continue_social':
+             self.process_social_loop(world)
+             
+        elif action == 'socialize':
+            self.qalb_socialize(world)
+            
+        elif action == 'gather_materials':
+             self.move_random(world)
+             self.gather(world)
+             
+        elif action == 'reproduce':
+             self.reproduce_in_game(world)
+             
+        elif action == 'attack':
+             target_id = plan.get('target_id')
+             target = world.agents.get(target_id)
+             if target:
+                 self.combat(target, world)
+             else:
+                 self.log_diary("My enemy has vanished.")
+                 
+        # --- Low Level Brain Actions ---
+        elif action == 'wait':
+            pass
+        elif action == 'step_x':
+            world.move_agent(self.id, plan['val'], 0)
+        elif action == 'step_y':
+            world.move_agent(self.id, 0, plan['val'])
+        elif action == 'interact':
+            # Try gather first, then eat
+            # This is "smart" interaction context for the brain
+            pos = (self.x, self.y)
+            if pos in world.items_grid:
+                self.gather(world)
+            else:
+                self.eat_from_inventory()
+    
+    def die(self, world, cause="unknown"):
+        if self.id not in world.agents: return
+        self.log_diary(f"Died of {cause}.")
+        print(f"Agent {self.attributes.name} died of {cause}.")
+        
+        # Reincarnation Logic (Evolution)
+        # We don't spawn immediately here (handled by world births), but we save the soul?
+        # For now, just remove from world.
+        del world.agents[self.id]
+        
+    def scan_surroundings(self, world):
+        """
+        Probabilistic Infinite Vision.
+        Probability of seeing = 1.0 / (1.0 + max(0, dist - 20) * 0.1)
+        Near (<=20): 100%
+        Far (>20): Decays.
+        """
+        # We cannot iterate ALL items in world every step for every agent (O(N^2)). 
+        # But for limited N (~50 agents, ~100 items?), it is okay.
+        # Let's optimize: Only scan if not busy? No, perception is passive.
+        # Clear agent memory for fresh scan
+        if 'agent' not in self.spatial_memory: self.spatial_memory['agent'] = []
+        
+        # Cleanup old memories (older than 500 steps)
+        self.spatial_memory['agent'] = [m for m in self.spatial_memory['agent'] if world.time_step - m.get('time', 0) < 500]
+        
+        self.visible_agents = [] # Reset per frame
+        
+        # 1. Scan Items (Food/Wood/Stone)
+        
+        # 1. Scan Items (Food/Wood/Stone)
+        # Note: In a real large grid, we would use a spatial index (Quadtree). 
+        # For 100x100 grid, raw iteration over dictionary keys is fast enough.
+        
+        for pos, items in world.items_grid.items():
+            dist = np.sqrt((self.x - pos[0])**2 + (self.y - pos[1])**2)
+            
+            # Probabilistic Vision (100% at 20, ~66% at 30)
+            prob = 1.0
+            if dist > 20: 
+                prob = 1.0 / (1.0 + (dist - 20) * 0.05)
+            
+            if np.random.random() < prob:
+                # Seen! Memorize.
+                # Simplified: Just store 'food' or type
+                item_name = items[0].name.lower()
+                category = 'food' if 'consumable' in items[0].tags else 'item'
+                if 'wood' in item_name: category = 'wood'
+                if 'rock' in item_name or 'stone' in item_name: category = 'stone'
+                
+                # Add to memory (Set logic)
+                if pos not in self.spatial_memory.get(category, []):
+                     if category not in self.spatial_memory: self.spatial_memory[category] = []
+                     self.spatial_memory[category].append(pos)
+
+        # 2. Scan Agents (Social)
+        for other in world.agents.values():
+            if other.id == self.id: continue
+            dist = self.distance_to(other)
+             
+            # Probabilistic Vision
+            prob = 1.0
+            if dist > 20:
+                prob = 1.0 / (1.0 + (dist - 20) * 0.05)
+            
+            if np.random.random() < prob:
+                # Add to known agents (We use opinions dict for now, or spatial)
+                # Let's add to spatial memory 'agent'
+                if 'agent' not in self.spatial_memory: self.spatial_memory['agent'] = []
+                # Remove if exist (inefficient but needed to update pos)
+                # self.spatial_memory['agent'] = [pos for pos in self.spatial_memory['agent'] if pos[2] != other.id] # Tuple doesn't have ID in spatial def?
+                # Definition: self.spatial_memory: Dict[str, List[Tuple[int, int]]]
+                # We need ID to track who it is. Update definition or use opinions.
+                # Opinions has persistent ID. Use that for identification.
+                # Spatial memory is for "Resource Locations".
+                # For agents, let's just use a separate list in memory or update opinions 'last_seen'
+                # For the 'Proximity Bonus' in propose_action, we need positions.
+                # Let's simple append (x,y) to 'agent' list, clear it every step? 
+                # Better: In propose_action, use `world.agents` directly if we allow "Sense" there.
+                # But we want strict memory.
+                # Let's just append to spatial_memory['agent'] tuple (x,y)
+                # self.spatial_memory['agent'].append((other.x, other.y))
+                
+                # STORE MEMORY WITH TIMESTAMPS
+                # Check if we already have this agent in memory, update it
+                mem_entry = next((m for m in self.spatial_memory['agent'] if m['id'] == other.id), None)
+                if mem_entry:
+                    mem_entry['pos'] = (other.x, other.y)
+                    mem_entry['time'] = world.time_step
+                else:
+                    self.spatial_memory['agent'].append({'pos': (other.x, other.y), 'id': other.id, 'time': world.time_step})
+                
+                # DEBUG: Log sighting
+                self.log_diary(f"DEBUG: Saw {other.attributes.name} at {dist:.1f}")
+                self.visible_agents.append(other.attributes.name)
+
+
+    def reproduce_in_game(self, world):
+        p_id = self.attributes.partner_id
+        partner = world.agents.get(p_id)
+        if not partner: return
+        
+        # Check Proximity
+        if self.distance_to(partner) < 2:
+             # 20% success rate
+             if np.random.random() < 0.2:
+                 self.log_diary(f"A new life is born with {partner.attributes.name}!")
+                 partner.log_diary(f"A new life is born with {self.attributes.name}!")
+                 
+                 # Create Child (Simplified)
+                 # In real world.py we used evolve_generation logic, we need to replicate that here or call a helper.
+                 # Let's call world helper (we need to add it to world)
+                 if hasattr(world, 'spawn_child'):
+                     world.spawn_child(self, partner)
+                     
+             self.state.busy_until = world.time_step + 20
+             partner.state.busy_until = world.time_step + 20
+        else:
+             # Move towards partner
+             dx = partner.x - self.x
+             dy = partner.y - self.y
+             mx = 1 if dx > 0 else -1 if dx < 0 else 0
+             my = 1 if dy > 0 else -1 if dy < 0 else 0
+             world.move_agent(self.id, mx, my)
+
+    def combat(self, target, world):
+        # Move to target
+        if self.distance_to(target) > 1.5:
+             dx = target.x - self.x
+             dy = target.y - self.y
+             mx = 1 if dx > 0 else -1 if dx < 0 else 0
+             my = 1 if dy > 0 else -1 if dy < 0 else 0
+             world.move_agent(self.id, mx, my)
+             return
+
+        # Attack
+        damage = 0.2 + (self.attributes.aggression * 0.5)
+        target.state.health -= damage
+        self.log_diary(f"I attacked {target.attributes.name}!")
+        target.log_diary(f"I was attacked by {self.attributes.name}!")
+        
+        # Karma Penalty
+        self.ruh.update_karma(-20.0)
+        
+        if target.state.health <= 0:
+            target.die(world, f"killed by {self.attributes.name}")
+            self.ruh.update_karma(-100.0) # Murder is heavy
+            self.log_diary(f"I killed {target.attributes.name}. May the Void forgive me.")
+    
+    # --- ACTIONS ---
+
+    def move_random(self, world):
+        # 1. Follow Leader (Swarm Bias)
+        if self.attributes.leader_id and self.attributes.leader_id != self.id:
+            leader = world.agents.get(self.attributes.leader_id)
+            if leader:
+                # 20% bias to move towards leader
+                if np.random.random() < 0.2:
+                    dx = leader.x - self.x
+                    dy = leader.y - self.y
+                    # Normalize
+                    mx = 1 if dx > 0 else -1 if dx < 0 else 0
+                    my = 1 if dy > 0 else -1 if dy < 0 else 0
+                    self.state.momentum_dir = (mx, my)
+
+        # PERCEPTION-AWARE EXPLORATION
+        # Instead of blind momentum, look ahead.
+        current_dir = self.state.momentum_dir
+        
+        # 1. Check if current direction is valid (Land)
+        is_valid = False
+        if current_dir != (0,0):
+             nx, ny = self.x + current_dir[0], self.y + current_dir[1]
+             if 0 <= nx < world.width and 0 <= ny < world.height:
+                 if world.terrain_grid[ny][nx] != 0: # Land
+                     is_valid = True
+        
+        # 2. If valid and lucky, keep going (Momentum)
+        if is_valid and np.random.random() < 0.8:
+             next_dir = current_dir
+        else:
+             # 3. Pick a new valid direction
+             # Scan all 8 neighbors
+             options = []
+             for dx in [-1, 0, 1]:
+                 for dy in [-1, 0, 1]:
+                     if dx == 0 and dy == 0: continue
+                     
+                     nx, ny = self.x + dx, self.y + dy
+                     if 0 <= nx < world.width and 0 <= ny < world.height:
+                         tile_type = world.terrain_grid[ny][nx]
+                         if tile_type != 0: # It is Land
+                             # Weighting?
+                             weight = 1.0
+                             # Bias forward (soft turn) if we had momentum
+                             if current_dir != (0,0):
+                                 dot = dx*current_dir[0] + dy*current_dir[1]
+                                 if dot > 0: weight += 2.0 # Forward
+                                 if dot < 0: weight *= 0.1 # Backward (turn around only if stuck)
+                             
+                             options.append(((dx, dy), weight))
+             
+             if options:
+                 # Weighted random choice
+                 total_w = sum(o[1] for o in options)
+                 r = np.random.uniform(0, total_w)
+                 upto = 0
+                 next_dir = (0, 0)
+                 for d, w in options:
+                     if upto + w >= r:
+                         next_dir = d
+                         break
+                     upto += w
+             else:
+                 next_dir = (0, 0) # Trapped?
+
+        self.state.momentum_dir = next_dir
+        if next_dir != (0, 0):
+            world.move_agent(self.id, next_dir[0], next_dir[1])
+
+    def flee(self, threat, world):
+        dx = self.x - threat.x
+        dy = self.y - threat.y
+        # Normalize
+        mx = 1 if dx > 0 else -1 if dx < 0 else 0
+        my = 1 if dy > 0 else -1 if dy < 0 else 0
+        world.move_agent(self.id, mx, my)
+
+    def navigate_to(self, tx, ty, world):
+        """
+        Smart navigation using BFS to avoid water/obstacles.
+        Refreshes path every step (for simplicity) or uses cached path.
+        """
+        # 1. Try naive match first (Optimization)
+        dx = tx - self.x
+        dy = ty - self.y
+        mx = 1 if dx > 0 else -1 if dx < 0 else 0
+        my = 1 if dy > 0 else -1 if dy < 0 else 0
+        
+        # Check if direct move is blocked by water
+        # Boundary check first
+        target_x, target_y = self.x + mx, self.y + my
+        if 0 <= target_x < world.width and 0 <= target_y < world.height:
+             if world.terrain_grid[target_y][target_x] != 0: # Not Water
+                 # Safe to move directly
+                 world.move_agent(self.id, mx, my)
+                 return
+        
+        # 2. PATHFINDING (BFS)
+        # Find shortest path to (tx, ty)
+        queue = [(self.x, self.y, [])]
+        visited = set()
+        visited.add((self.x, self.y))
+        
+        # Limit depth to prevent lag
+        max_depth = 25
+        
+        found_path = None
+        
+        while queue:
+            cx, cy, path = queue.pop(0)
+            
+            if len(path) > max_depth: continue
+            
+            # Neighbors (Up, Down, Left, Right)
+            for nx, ny in [(cx+1, cy), (cx-1, cy), (cx, cy+1), (cx, cy-1)]:
+                 if 0 <= nx < world.width and 0 <= ny < world.height:
+                     if (nx, ny) not in visited:
+                         # Check Walkable
+                         if world.terrain_grid[ny][nx] != 0: # Not Water
+                             visited.add((nx, ny))
+                             new_path = list(path)
+                             new_path.append((nx, ny))
+                             queue.append((nx, ny, new_path))
+                             
+                             # Early exit if target found or close enough
+                             # Exact match might be hard if blocked, so "close enough" logic?
+                             # For now, simplistic: Exact or Adjacent to target
+                             dist_sq = (nx - tx)**2 + (ny - ty)**2
+                             if dist_sq <= 2: 
+                                 found_path = new_path
+                                 break
+            if found_path: break
+            
+        if found_path:
+            # Take first step
+            next_step = found_path[0]
+            nx, ny = next_step
+            # Calculate delta
+            ddx = nx - self.x
+            ddy = ny - self.y
+            world.move_agent(self.id, ddx, ddy)
+        else:
+            # Fallback: Random (stuck)
+            self.move_random(world)
+
+    def gather(self, world):
+        # Opportunistic gather
+        items = world.items_grid.get((self.x, self.y))
+        if items:
+            item = items[0]
+            if self.can_pickup(item):
+                to_take = items.pop(0)
+                if not items: del world.items_grid[(self.x, self.y)]
+                self._add_to_inventory(to_take)
+                self.log_diary(f"Picked up {to_take.name}.")
+
+    def can_pickup(self, item) -> bool:
+        # Simple cap
+        count = sum([s['count'] for s in self.inventory if s['item']['name'] == item.name])
+        if count >= 10: return False
+        return True
+
+    def _add_to_inventory(self, item):
+        for slot in self.inventory:
+            if slot['item']['name'] == item.name:
+                slot['count'] += 1
+                return
+        self.inventory.append({'item': item.to_dict(), 'count': 1})
+
+    def eat_from_inventory(self) -> bool:
+        for i, slot in enumerate(self.inventory):
+            if "consumable" in slot['item']['tags']:
+                slot['count'] -= 1
+                self.nafs.hunger = max(0.0, self.nafs.hunger - 0.5)
+                self.log_diary(f"Ate {slot['item']['name']}.")
+                if slot['count'] <= 0: self.inventory.pop(i)
+                return True
+        return False
+        
+    def qalb_socialize(self, world):
+        """
+        Complex Social Logic: Hierarchy, Herding, and Chat Loops.
+        """
+        # 1. Vision Filter (Who can I see?)
+        candidates = []
+        for other in world.agents.values():
+            if other.id == self.id: continue
+            dist = self.distance_to(other)
+            
+            # Probabilistic Vision (100% at 20, ~66% at 30)
+            prob = 1.0
+            if dist > 20: prob = 1.0 / (1.0 + (dist - 20) * 0.05)
+            
+            # Family/Friends are always sensed (Psychic Link)
+            if other.id == self.attributes.partner_id or other.id in self.attributes.friend_ids:
+                prob = 1.0
+                
+            if np.random.random() < prob:
+                candidates.append((dist, other))
+        
+        cand_count = len(candidates)
+        print(f"Agent {self.attributes.name} scanning social... Found {cand_count} candidates.")
+        
+        candidates.sort(key=lambda x: x[0])
+        
+        # 2. Decision: Interact or Move?
+        if not candidates: 
+            # print(f"  Agent {self.attributes.name}: No visible candidates.")
+            self.log_diary("DEBUG: Socialize - No visible agents")
+            
+            # SEEK LAST KNOWN LOCATION (Persistent Memory)
+            known_agents = self.spatial_memory.get('agent', [])
+            if known_agents:
+                # Sort by time (recency)
+                known_agents.sort(key=lambda m: m['time'], reverse=True)
+                last_seen = known_agents[0]
+                tx, ty = last_seen['pos']
+                
+                dist_to_mem = np.sqrt((self.x - tx)**2 + (self.y - ty)**2)
+                
+                if dist_to_mem > 2:
+                    print(f"  Agent {self.attributes.name}: Seeking memory of agent at {tx},{ty}")
+                    # Move towards it
+                    dx = tx - self.x
+                    dy = ty - self.y
+                    mx = 1 if dx > 0 else -1 if dx < 0 else 0
+                    my = 1 if dy > 0 else -1 if dy < 0 else 0
+                    world.move_agent(self.id, mx, my)
+                    return
+                else:
+                     # We arrived but they are gone. Remove memory.
+                     self.spatial_memory['agent'].pop(0)
+            
+            self.move_random(world)
+            return
+
+        nearest_dist, nearest = candidates[0]
+        # print(f"  Agent {self.attributes.name}: Nearest {nearest.attributes.name} at {nearest_dist:.1f}")
+        
+        # Priority: Partner -> Leader -> Friend -> Stranger
+        target = nearest
+        
+        # Override Target: If I have a leader or partner far away, go to them.
+        # But for now, stick to nearest visible for interaction.
+        
+        # A. INTERACTION (Close Range <= 2.0)
+        if nearest_dist <= 2.0:
+            # Check if target is available
+            if target.state.social_lock_target and target.state.social_lock_target != self.id:
+                self.log_diary(f"DEBUG: {target.attributes.name} is busy.")
+                return
+
+            # Check Cooldown
+            if self.qalb.social_cooldowns.get(nearest.id, 0) > world.time_step:
+                self.log_diary(f"DEBUG: Resting from social with {nearest.attributes.name}")
+                # Maybe move away?
+                self.move_random(world)
+                return
+
+            # Start MUTUAL Chat Loop
+            self.state.social_lock_target = nearest.id
+            self.state.social_lock_steps = 5
+            
+            # Force them to lock onto me (Mutual)
+            target.state.social_lock_target = self.id
+            target.state.social_lock_steps = 5 
+            
+            self.log_diary(f"Locked social with {nearest.attributes.name}.")
+            self.process_social_loop(world) # Do first step now
+            return
+        else:
+            # Approach Logic
+            self.log_diary(f"Approaching {nearest.attributes.name} ({nearest_dist:.1f})")
+            # Move towards logic is handled below in 'Herding' but we should ensure we move TO them if we want to socialize
+            # Force strict movement to Nearest if intending to socialize
+            # dx = nearest.x - self.x
+            # dy = nearest.y - self.y
+            # mx = 1 if dx > 0 else -1 if dx < 0 else 0
+            # my = 1 if dy > 0 else -1 if dy < 0 else 0
+            # world.move_agent(self.id, mx, my)
+            self.navigate_to(nearest.x, nearest.y, world)
+            return
+
+        # B. MOVEMENT (Herding)
+        # Calculate attraction/repulsion vector
+        vec_x, vec_y = 0.0, 0.0
+        
+        for dist, other in candidates:
+            op = self.qalb.opinions.get(other.id, 0.0)
+            
+            # FRIENDS (Op > 5) -> Attract
+            if op > 5 or other.id == self.attributes.partner_id:
+                force = 10.0 / (dist + 0.1)
+                vec_x += (other.x - self.x) * force
+                vec_y += (other.y - self.y) * force
+                
+            # ENEMIES (Op < -5) -> Repel
+            elif op < -5:
+                force = 10.0 / (dist + 0.1)
+                vec_x -= (other.x - self.x) * force
+                vec_y -= (other.y - self.y) * force
+        
+        # If no strong opinions, just go to nearest (Desire to socialize)
+        if vec_x == 0 and vec_y == 0:
+            vec_x = nearest.x - self.x
+            vec_y = nearest.y - self.y
+            
+        # Normalize and Move
+        mag = np.sqrt(vec_x**2 + vec_y**2)
+        if mag > 0:
+            mx = 1 if vec_x > 0 else -1 if vec_x < 0 else 0
+            my = 1 if vec_y > 0 else -1 if vec_y < 0 else 0
+            world.move_agent(self.id, mx, my)
+        else:
+             self.move_random(world)
+
+    def process_social_loop(self, world):
+        target_id = self.state.social_lock_target
+        target = world.agents.get(target_id)
+        
+        if not target or self.distance_to(target) > 3.0:
+            # Break Loop (Target lost/left)
+            self.state.social_lock_target = None
+            self.state.social_lock_steps = 0
+            # Set Cooldown
+            self.qalb.social_cooldowns[target_id] = world.time_step + 40 # 40 steps timeout
+            return
+            
+        self.log_diary(f"DEBUG: Processing Social Loop with {target.attributes.name}")
+            
+        # GAME THEORY ROUND (Once per step per pair? No, that's too fast. Once per interaction start?)
+        # Let's do it every step but with small impact, or only on first step?
+        # User wants "socialize using game theory". 
+        # Let's say every step of the lock is a "Round" of the game.
+        
+        # 1. Decide My Move
+        my_move = self.make_game_decision(target_id)
+        
+        # 2. Decide Their Move (Simulated for equality, or read their state?)
+        their_move = target.make_game_decision(self.id)
+        
+        self.log_diary(f"DEBUG: Moves - Me: {my_move}, Them: {their_move}")
+        
+        # 3. Payoff Matrix (Standard PD)
+        # T > R > P > S
+        # Defect/Coop (T) > Coop/Coop (R) > Defect/Defect (P) > Coop/Defect (S)
+        # Rewards: Happiness and Social Need
+        
+        my_payoff = 0.0
+        their_payoff = 0.0
+        
+        score_impact = 0.0 # Opinion change
+        
+        if my_move == 'cooperate' and their_move == 'cooperate':
+            # Reward
+            my_payoff = 0.1
+            their_payoff = 0.1
+            score_impact = 0.5 # We like each other
+            self.log_diary(f"Cooperated with {target.attributes.name}. Harmony.")
+            
+        elif my_move == 'defect' and their_move == 'defect':
+            # Punishment
+            my_payoff = -0.05
+            their_payoff = -0.05
+            score_impact = -0.2 # Distrust
+            self.log_diary(f"Clashed with {target.attributes.name}. Both defected.")
+            
+        elif my_move == 'defect' and their_move == 'cooperate':
+            # Temptation (I win, they lose)
+            my_payoff = 0.2
+            their_payoff = -0.2
+            score_impact = -0.5 # They hate me now (handled in their update potentially?)
+            # But here I am thinking... if I defected and they coop, do I like them?
+            # Maybe I think they are a sucker (Dominance).
+            self.qalb.opinions[target_id] = self.qalb.opinions.get(target_id, 0) + 0.1 # I exploited them
+            
+        elif my_move == 'cooperate' and their_move == 'defect':
+            # Sucker
+            my_payoff = -0.2
+            their_payoff = 0.2
+            score_impact = -1.0 # Betrayal!
+            self.log_diary(f"Betrayed by {target.attributes.name}!")
+            
+        # Apply Payoffs
+        self.state.happiness = min(1.0, max(0.0, self.state.happiness + my_payoff))
+        self.qalb.social = min(1.0, self.qalb.social + 0.1) # Interaction always fills social a bit
+        
+        # Update Memories
+        self.qalb.social_memory[target_id] = their_move
+        if target_id not in self.qalb.history: self.qalb.history[target_id] = []
+        self.qalb.history[target_id].append(their_move)
+        
+        # We need to update THEIR memory of ME too so next turn is fair?
+        # Or let them handle it on their turn? 
+        # PROBLEM: If we update them, and they act later in the loop, they might double count?
+        # Sync issue. 
+        # Simplification: Only update MY state. When THEY act, they will check me.
+        # But wait, 'their_move' was hypothetical? No, we called the function.
+        # We should probably NOT change their state here, only mine.
+        # BUT: For consistent Game Theory, we need simultaneous moves.
+        # Let's assume on their turn, they will do the same against me.
+        # So I only process MY rewards and MY memory of THEM.
+        
+        # Update Opinion
+        curr_op = self.qalb.opinions.get(target_id, 0.0)
+        new_op = curr_op + score_impact
+        self.qalb.opinions[target_id] = new_op
+        
+        # RELATIONSHIP THRESHOLDS
+        # Rivals
+        if new_op <= -30 and curr_op > -30:
+             self.log_diary(f"{target.attributes.name} is now my RIVAL!")
+        # Friends
+        if new_op >= 10 and curr_op < 10:
+             self.log_diary(f"{target.attributes.name} is now my Friend.")
+             self.attributes.friend_ids.append(target_id)
+        # Best Friends
+        if new_op >= 20 and curr_op < 20:
+             self.log_diary(f"{target.attributes.name} is my Best Friend!")
+        # Lovers
+        if new_op >= 30 and curr_op < 30:
+             if self.attributes.gender != target.attributes.gender:
+                 self.log_diary(f"I am in love with {target.attributes.name}!")
+                 self.attributes.partner_id = target_id
+             else:
+                 self.log_diary(f"{target.attributes.name} is my Brother/Sister in arms!")
+
+        # REPRODUCTION (Every 60 points)
+        # Check if we crossed a multiple of 60 boundary
+        # e.g., 59 -> 60, 119 -> 120
+        if self.attributes.partner_id == target_id:
+             if int(new_op / 60) > int(curr_op / 60):
+                 self.log_diary(f"A magical moment with {target.attributes.name}...")
+                 self.reproduce_in_game(world)
+
+        # POLITICS & LEADERSHIP
+        # 1. Assert Leadership (Alpha)
+        my_leadership_score = self.attributes.aggression + self.attributes.personality_vector["Social"]
+        their_leadership_score = target.attributes.aggression + target.attributes.personality_vector["Social"]
+        
+        # If I am charismatic and dominant, and they are weaker
+        if my_leadership_score > 1.4 and my_leadership_score > their_leadership_score + 0.3:
+            # "Kneel before Zod"
+            if not self.attributes.leader_id:
+                self.attributes.leader_id = self.id # I am my own leader
+                self.log_diary("I am the Alpha.")
+                
+                # FOUND TRIBE if not exists
+                if not self.attributes.tribe_id:
+                     tribe = world.create_tribe(f"{self.attributes.name}'s Tribe", self.id)
+                     self.attributes.tribe_id = tribe.id
+            
+            if target.attributes.leader_id != self.id:
+                 # Attempt Convert
+                 if np.random.random() < 0.3: # 30% chance they concede
+                     # Join my Tribe
+                     if self.attributes.tribe_id:
+                         world.join_tribe(target.id, self.attributes.tribe_id)
+                         target.attributes.leader_id = self.id
+                         self.log_diary(f"Recruited {target.attributes.name} to {world.tribes[self.attributes.tribe_id].name}.")
+                         target.log_diary(f"I pledge allegiance to {self.attributes.name}.")
+                     
+        # 2. Recruit for my Leader (Beta)
+        elif self.attributes.leader_id and self.attributes.leader_id != self.id:
+             # "Have you heard of our lord?"
+             if target.attributes.leader_id != self.attributes.leader_id:
+                 leader_tribe_id = self.attributes.tribe_id
+                 if leader_tribe_id:
+                     if np.random.random() < 0.1:
+                         world.join_tribe(target.id, leader_tribe_id)
+                         target.attributes.leader_id = self.attributes.leader_id
+                         self.log_diary(f"Convinced {target.attributes.name} to join our tribe.")
+
+        # SET GOALS (As Leader)
+        if self.attributes.leader_id == self.id and self.attributes.tribe_id:
+            # Update Tribe Goal
+            tribe = world.tribes.get(self.attributes.tribe_id)
+            if tribe:
+                if self.nafs.hunger > 0.6: tribe.set_goal("gather_food")
+                else: tribe.set_goal("gather_wood")
+            
+        # FOLLOW ORDERS (As Follower) is handled in execute command or passive goal sync
+            
+        # Decrement timer
+        self.state.social_lock_steps -= 1
+        if self.state.social_lock_steps <= 0:
+             self.state.social_lock_target = None
+             # Set Cooldown
+             self.qalb.social_cooldowns[target_id] = world.time_step + 60
+
+    def determine_strategy(self):
+        p = self.attributes.personality_vector
+        aggr = p.get("Aggression", 0.5)
+        altr = p.get("Altruism", 0.5)
+        forg = p.get("Forgiveness", 0.5)
+        
+        if altr > 0.8: self.attributes.strategy = GameStrategy.ALWAYS_COOPERATE.value
+        elif aggr > 0.8: self.attributes.strategy = GameStrategy.ALWAYS_DEFECT.value
+        elif aggr > 0.6 and altr < 0.4: self.attributes.strategy = GameStrategy.BULLY.value
+        elif forg > 0.8: self.attributes.strategy = GameStrategy.TIT_FOR_TWO_TATS.value
+        elif forg < 0.2: self.attributes.strategy = GameStrategy.GRIM_TRIGGER.value
+        elif p.get("Logic", 0.5) > 0.7: self.attributes.strategy = GameStrategy.PAVLOV.value
+        elif p.get("Impulsivity", 0.5) > 0.8: self.attributes.strategy = GameStrategy.RANDOM.value
+        else: self.attributes.strategy = GameStrategy.TIT_FOR_TAT.value # Default
+        
+    def make_game_decision(self, opponent_id: str) -> str:
+        strat = self.attributes.strategy
+        history = self.qalb.history.get(opponent_id, [])
+        last_move_them = self.qalb.social_memory.get(opponent_id, None)
+        
+        # 1. Defaults
+        if not history:
+            # First move: Cooperate usually, unless aggressive
+            if strat in [GameStrategy.ALWAYS_DEFECT.value, GameStrategy.BULLY.value]: return 'defect'
+            if strat == GameStrategy.RANDOM.value: return np.random.choice(['cooperate', 'defect'])
+            return 'cooperate' # TFT, Pavlov, etc start nice
+            
+        # 2. Strategies
+        if strat == GameStrategy.ALWAYS_COOPERATE.value: return 'cooperate'
+        if strat == GameStrategy.ALWAYS_DEFECT.value: return 'defect'
+        
+        if strat == GameStrategy.RANDOM.value: 
+            return np.random.choice(['cooperate', 'defect'])
+            
+        if strat == GameStrategy.TIT_FOR_TAT.value:
+            return last_move_them if last_move_them else 'cooperate'
+            
+        if strat == GameStrategy.TIT_FOR_TWO_TATS.value:
+            # Defect only if last 2 were defects
+            if len(history) >= 2 and history[-1] == 'defect' and history[-2] == 'defect':
+                return 'defect'
+            return 'cooperate'
+            
+        if strat == GameStrategy.GRIM_TRIGGER.value or strat == GameStrategy.UNFORGIVING.value:
+            if 'defect' in history: return 'defect'
+            return 'cooperate'
+            
+        if strat == GameStrategy.PAVLOV.value:
+            # Win-Stay, Lose-Switch
+            # If I played X and got Reward (They coop), Stay X.
+            # If I played X and got Sucker/Punish (They defect), Switch.
+            # We need to know MY last move.
+            # This requires storing my history too? 
+            # Approximate: Pavlov coops if we agreed (CC or DD), defects if we disagreed (CD or DC).
+            # Wait, standard Pavlov: 
+            # If opponent cooperated -> Play what I played last time.
+            # If opponent defected -> Switch what I played last time.
+            # Lets treat it simplified: Coop if we acted same last round?
+            return last_move_them # Placeholder, actually Pavlov is complex without my history.
+            # Let's fallback to TFT to avoid crash or strict logic
+            return last_move_them             
+
+        if strat == GameStrategy.BULLY.value:
+             # Defect first. If they defect back, maybe coop to appease?
+             # Simple Bully: Always defect unless punished?
+             # Let's say: Defect. But if they defected last time, Cooperate (Chicken out).
+             if last_move_them == 'defect': return 'cooperate'
+             return 'defect'
+             
+        if strat == GameStrategy.PEACEMAKER.value:
+            # TFT but 10% chance to forgive defect
+            if last_move_them == 'defect':
+                if np.random.random() < 0.2: return 'cooperate'
+                return 'defect'
+            return 'cooperate'
+            
+        return 'cooperate'
+
+    # --- HELPERS ---
+
+    def distance_to(self, entity) -> float:
+        return np.sqrt((self.x - entity.x)**2 + (self.y - entity.y)**2)
+
+    def log_diary(self, entry: str):
+        self.diary.append(f"[Life {self.ruh.soul.past_lives}] {entry}")
+        if len(self.diary) > 50: self.diary.pop(0)
+
+    def add_memory(self, desc: str, type="event", impact=0.0):
+        self.ruh.soul.memories.append(Memory(type=type, description=desc, location=(self.x, self.y), time=self.state.age_steps, emotional_impact=impact))
+
+    def to_dict(self, world=None):
+        """
+        Serializer for Frontend/API.
+        Adapts the new structure to a flat JSON compatible with existing props where possible,
+        but exposes the new structure too.
+        """
         return {
             "id": self.id,
             "x": int(self.x),
             "y": int(self.y),
             "attributes": self.attributes.__dict__,
             "state": self.state.__dict__,
+            "needs": { # Flattened view for frontend compatibility
+                "hunger": self.nafs.hunger,
+                "energy": self.nafs.energy,
+                "social": self.qalb.social,
+                "fun": self.qalb.fun
+            },
+            "nafs": {k:v for k,v in self.nafs.__dict__.items() if k != 'agent'},
+            "qalb": {k:v for k,v in self.qalb.__dict__.items() if k != 'agent' and k != 'brain'}, # Exclude brain object too (PPO model not serializable)
+            "ruh": {
+                "life_goal": self.ruh.life_goal,
+                "wisdom": self.ruh.wisdom,
+                "karma": self.ruh.soul.karma,
+                "past_lives": self.ruh.soul.past_lives
+            },
+            "strategy": self.attributes.strategy,
+            "social_memory": self.qalb.social_memory,
             "inventory": self.inventory,
-            "knowledge": self.knowledge,
-            "diary": getattr(self, 'diary', []),
-            "traits": self.traits,
-            "immediate_goal": self.immediate_goal,
-            "short_term_goal": self.short_term_goal,
-            "long_term_goal": self.long_term_goal,
-            "generation": self.attributes.generation,
-            "opinions": self.opinions,
-            "memory": [m.__dict__ for m in self.memory[-10:]], # Serialize memories
-            "partner_id": self.attributes.partner_id,
-            "friend_ids": self.attributes.friend_ids
+            "diary": self.diary,
+            "visible_agents": self.visible_agents,
+            # Tribe Info
+            "tribe_id": self.attributes.tribe_id,
+            "tribe_name": world.tribes[self.attributes.tribe_id].name if world and self.attributes.tribe_id and self.attributes.tribe_id in world.tribes else "Nomad",
+            "tribe_goal": world.tribes[self.attributes.tribe_id].goal if world and self.attributes.tribe_id and self.attributes.tribe_id in world.tribes else "wander",
+            "generation": self.attributes.generation
         }
-
-    def get_resource_count(self, resource_name: str) -> int:
-        """Helper to get count of a resource from inventory list."""
-        for slot in self.inventory:
-            if slot['item']['name'].lower() == resource_name.lower():
-                return slot['count']
-        return 0
-
-    def add_resource(self, resource_name: str, amount: int = 1):
-        """Helper to add a simple resource to inventory."""
-        # Check if exists
-        for slot in self.inventory:
-            if slot['item']['name'].lower() == resource_name.lower():
-                slot['count'] += amount
-                if slot['count'] <= 0:
-                    self.inventory.remove(slot)
-                return
-        
-        # If not exists and adding positive amount
-        if amount > 0:
-            # Create dummy item for RL simplicity
-            from ..env.item import Item
-            import uuid
-            new_item = Item(id=f"{resource_name}_{uuid.uuid4()}", name=resource_name.capitalize(), weight=1.0)
-            self.inventory.append({'item': new_item.to_dict(), 'count': amount})
-
-    def log_diary(self, entry: str):
-        if not hasattr(self, 'diary'):
-            self.diary = []
-        self.diary.append(f"[Step {len(self.diary)}] {entry}")
-        
-    def add_memory(self, description: str, type: str = "event", location: tuple = None, impact: float = 0.0, entity_id: str = None):
-        if location is None: location = (self.x, self.y)
-        # Simple time approximation (len of memory)
-        time = len(self.memory) 
-        mem = Memory(type=type, description=description, location=location, time=time, emotional_impact=impact, related_entity_id=entity_id)
-        self.memory.append(mem)
-        # Keep memory size manageable
-        if len(self.memory) > 100:
-            self.memory.pop(0)
-
-    def die(self, world, cause: str):
-        world.log_event(f"Agent {self.attributes.name} died of {cause}.")
-        if self.id in world.agents:
-            del world.agents[self.id]
-
-    def reproduce(self, partner, world):
-        # Genetic Algorithm for offspring
-        child_gender = np.random.choice(['male', 'female'])
-        
-        # Crossover Personality Vectors
-        child_p_vector = {}
-        for trait in PERSONALITY_TRAITS:
-            # Randomly pick from p1 or p2, or average
-            if np.random.random() < 0.4:
-                val = self.attributes.personality_vector[trait]
-            elif np.random.random() < 0.4:
-                val = partner.attributes.personality_vector[trait]
-            else:
-                val = (self.attributes.personality_vector[trait] + partner.attributes.personality_vector[trait]) / 2.0
-            
-            # Mutation
-            if np.random.random() < 0.1: # 10% mutation chance
-                val += np.random.normal(0, 0.1)
-            
-            child_p_vector[trait] = float(np.clip(val, 0.0, 1.0))
-
-        # Name generation
-        child_name = np.random.choice(NAMES_MALE if child_gender == 'male' else NAMES_FEMALE)
-        
-        child = Agent(x=self.x, y=self.y, name=child_name, gender=child_gender)
-        child.attributes.personality_vector = child_p_vector
-        child.attributes.generation = max(self.attributes.generation, partner.attributes.generation) + 1
-        
-        # Update derived attributes
-        child.attributes.curiosity = child_p_vector["Curiosity"]
-        child.attributes.honesty = child_p_vector["Altruism"]
-        child.attributes.aggression = child_p_vector["Aggression"]
-        child.traits = child._derive_traits(child_p_vector)
-        
-        # Experience Transfer (Inherit some knowledge)
-        if self.knowledge:
-            child.knowledge.extend(np.random.choice(self.knowledge, size=min(len(self.knowledge), 2), replace=False))
-        if partner.knowledge:
-            child.knowledge.extend(np.random.choice(partner.knowledge, size=min(len(partner.knowledge), 2), replace=False))
-        child.knowledge = list(set(child.knowledge)) # Deduplicate
-        
-        # ADD TO WORLD
-        if hasattr(world, 'agents'):
-            world.agents[child.id] = child
-            child.log_diary(f"I was born! Parents: {self.attributes.name} & {partner.attributes.name}")
-            self.log_diary(f"I had a baby named {child.attributes.name}!")
-            partner.log_diary(f"I had a baby named {child.attributes.name}!")
-
-            
-    def formulate_plan(self, goal: str, world) -> bool:
-        """
-        Generates a plan based on the goal.
-        Returns True if a plan was formed.
-        """
-        self.plan = []
-        
-        if goal == "Find Food":
-            # 0. Check Visible (Reactive)
-            visible = self.perceive(world)
-            for v_item in visible['items']:
-                # Item object in visible list, not dict
-                if "consumable" in v_item['item'].tags:
-                     self.plan.append({'action': 'move', 'target': (v_item['x'], v_item['y']), 'desc': f"Moving to visible {v_item['item'].name}"})
-                     self.plan.append({'action': 'gather', 'target': None, 'desc': "Gathering food"})
-                     return True
-        
-            # 1. Check Memory
-            best_mem = None
-            for mem in self.memory:
-                if "food" in mem.description.lower() or "fruit" in mem.description.lower():
-                    best_mem = mem
-                    # Use recent memories
-                    if len(self.memory) - mem.time < 50: 
-                        break
-            
-            if best_mem:
-                self.plan.append({'action': 'move', 'target': best_mem.location, 'desc': f"Moving to remembered food at {best_mem.location}"})
-                self.plan.append({'action': 'gather', 'target': None, 'desc': "Gathering food"})
-                return True
-            
-            # 2. Explore Resource Zones (Smart Exploration)
-            # Try to find a Grass(2) or Forest(3) tile to explore
-            found_zone = False
-            for _ in range(5):
-                rx, ry = np.random.randint(0, world.width), np.random.randint(0, world.height)
-                # This cheats slightly by knowing world terrain, but represents "Knowledge of Biomes"
-                tile_type = world.terrain_grid[ry][rx]
-                if tile_type in [2, 3]: # Grass or Forest
-                    self.plan.append({'action': 'move', 'target': (rx, ry), 'desc': "Searching foraging grounds"})
-                    found_zone = True
-                    break
-            
-            if not found_zone:
-                rx, ry = np.random.randint(0, world.width), np.random.randint(0, world.height)
-                self.plan.append({'action': 'move', 'target': (rx, ry), 'desc': "Exploring for food"})
-            return True
-
-        elif goal == "Crafting":
-            # Simplified: Just explore to find resources
-            self.plan.append({'action': 'move', 'target': (np.random.randint(0, world.width), np.random.randint(0, world.height)), 'desc': "Looking for resources"})
-            return True
-
-        elif goal == "Gather Resources":
-            # Hoarding: Go find items even if not hungry
-            self.plan.append({'action': 'move', 'target': (np.random.randint(0, world.width), np.random.randint(0, world.height)), 'desc': "Hoarding resources"})
-            self.plan.append({'action': 'gather', 'target': None, 'desc': "Gathering resources"})
-            return True
-            
-        elif goal == "Socializing":
-             # Find nearest visible agent
-             visible = self.perceive(world)
-             if visible['agents']:
-                 target_agent = visible['agents'][0]['agent'] # Nearest
-                 self.plan.append({'action': 'move', 'target': (target_agent.x, target_agent.y), 'desc': f"Visiting {target_agent.attributes.name}"})
-                 self.plan.append({'action': 'socialize', 'target': target_agent.id, 'desc': f"Socializing with {target_agent.attributes.name}"})
-                 return True
-             else:
-                 # No one visible? Wander to find someone
-                 rx, ry = np.random.randint(0, world.width), np.random.randint(0, world.height)
-                 self.plan.append({'action': 'move', 'target': (rx, ry), 'desc': "Searching for friends"})
-                 return True
-             
-        return False
-
-    def execute_plan(self, world):
-        if not self.plan:
-            return
-
-        step = self.plan[0]
-        action = step['action']
-        
-        if action == 'move':
-            tx, ty = step['target']
-            dx = tx - self.x
-            dy = ty - self.y
-            
-            if abs(dx) <= 1 and abs(dy) <= 1:
-                # Arrived
-                self.plan.pop(0)
-                return
-            
-            # Move towards
-            move_x = 1 if dx > 0 else -1 if dx < 0 else 0
-            move_y = 1 if dy > 0 else -1 if dy < 0 else 0
-            
-            if not world.move_agent(self.id, move_x, move_y):
-                 # Blocked? Try random
-                 if np.random.random() < 0.5:
-                    world.move_agent(self.id, np.random.randint(-1, 2), np.random.randint(-1, 2))
-            
-        elif action == 'gather':
-            self.gather(world)
-            self.plan.pop(0)
-
-        elif action == 'socialize':
-            # Logic: If close enough, communicate. If not, plan fails (or we just tried).
-            self.socialize(world)
-            self.plan.pop(0)
-
-    def act(self, action_idx: int, world):
-        """
-        Executes an action.
-        Prioritizes survival > social > exploration.
-        """
-        # Check if busy (Face-to-Face communication)
-
-            
-        # Update Age
-        age = self.get_age(world.time_step)
-        
-        # Entropy Ticker (Hunger Decay)
-        self.state.hunger += 0.001
-
-        # SAFETY NET: Auto-eat if getting very hungry
-        if self.state.hunger > 0.7:
-             self.eat_from_inventory() # Takes no time, just consumes item
-
-        # Track last position for movement penalty
-        if not hasattr(self, 'last_x'):
-            self.last_x, self.last_y = self.x, self.y
-        
-        # Perception
-        perceived = self.perceive(world)
-        
-        # Check Vitality (Death)
-        if self.state.hunger >= 1.0:
-            self.die(world, "starvation")
-            return
-
-        # --- REACTIVE LAYER (Survival) ---
-        # 0. Flee Predators (Overrides EVERYTHING, even social locks)
-        nearby_carnivores = []
-        for animal in world.animals:
-            if animal.type == 'carnivore':
-                dist = np.sqrt((self.x - animal.x)**2 + (self.y - animal.y)**2)
-                if dist < 10:
-                    nearby_carnivores.append((animal, dist))
-        
-        if nearby_carnivores:
-            self.immediate_goal = "Fleeing Predator"
-            # Break Social Lock if exists
-            if self.state.busy_until > world.time_step:
-                self.log_diary("I broke off the chat to run for my life!")
-                self.state.busy_until = 0
-                
-            self.plan = [] # Clear plan
-            # Flee logic...
-            nearest_carnivore = min(nearby_carnivores, key=lambda x: x[1])[0]
-            dx = self.x - nearest_carnivore.x
-            dy = self.y - nearest_carnivore.y
-            move_x = 1 if dx > 0 else -1 if dx < 0 else np.random.choice([-1, 1])
-            move_y = 1 if dy > 0 else -1 if dy < 0 else np.random.choice([-1, 1])
-            world.move_agent(self.id, move_x, move_y)
-            return
-
-        # Check if busy (Face-to-Face communication)
-        if world.time_step < self.state.busy_until:
-            # HUNGER OVERRIDE: If starving, break social lock
-            if self.state.hunger > 0.6: # Relaxed slightly from 0.8 to be safer
-                self.log_diary("I'm too hungry to chat!")
-                self.state.busy_until = 0 # Break lock
-                self.social_cooldown = world.time_step + 20 # Don't chat for 20 ticks
-                # Fall through to allow acting (finding food)
-            else:
-                # SOCIAL MULTITASKING: Eat or Gather while chatting
-                # 1. Eat if hungry and have food
-                if self.state.hunger > 0.5:
-                     self.eat_from_inventory()
-                
-                # 2. Gather if standing on item
-                if world.items_grid.get((self.x, self.y)):
-                     self.gather(world)
-                     # Optional: Log sharing?
-                     if hasattr(self.state, 'last_interaction') and self.state.last_interaction.get('type') == 'love':
-                         self.log_diary("We gathered resources together <3")
-                         
-                return # Still busy (don't move)
-
-        # --- PROACTIVE LAYER (Planning) ---
-        
-        # 1. Determine Goal
-        new_goal = "Idle"
-        if self.state.hunger > 0.4: # Lowered from 0.6 to be proactive
-            new_goal = "Find Food"
-        elif np.random.random() < 0.4:
-            new_goal = "Socializing"
-        elif np.random.random() < 0.2: # Increased crafting/hoarding chance
-            if np.random.random() < 0.5:
-                new_goal = "Crafting"
-            else:
-                new_goal = "Gather Resources" # Hoarding
-            
-        # Opportunistic Socializing: If someone is VERY close, chat!
-        if new_goal == "Idle":
-            nearby = [a for a in perceived['agents'] if a['dist'] < 3]
-            if nearby:
-                new_goal = "Socializing"
-            
-        # 2. Formulate Plan if Goal Changed or No Plan
-        if new_goal != self.short_term_goal or not self.plan:
-            self.short_term_goal = new_goal
-            if new_goal != "Idle":
-                self.formulate_plan(new_goal, world)
-        
-        # 3. Execute Plan
-        if self.plan:
-            self.immediate_goal = self.plan[0].get('desc', 'Acting')
-            self.execute_plan(world)
-            return
-            
-        # 4. Fallback (Persistent Wandering)
-        self.immediate_goal = "Wandering"
-        
-        # Initialize or update wandering target
-        if not hasattr(self, 'wander_target') or self.has_reached_target(self.wander_target):
-             # Pick new distant target
-             # Biased towards Green zones if hungry?
-             while True:
-                 wx, wy = np.random.randint(0, world.width), np.random.randint(0, world.height)
-                 if np.sqrt((self.x-wx)**2 + (self.y-wy)**2) > 20: # Must be far
-                     self.wander_target = (wx, wy)
-                     break
-        
-        # Move towards wander target
-        dx = self.wander_target[0] - self.x
-        dy = self.wander_target[1] - self.y
-        move_x = 1 if dx > 0 else -1 if dx < 0 else 0
-        move_y = 1 if dy > 0 else -1 if dy < 0 else 0
-        
-        # Add some noise (10% chance to deviate)
-        if np.random.random() < 0.1:
-            move_x = np.random.randint(-1, 2)
-            move_y = np.random.randint(-1, 2)
-        
-        # --- COHESION (Social Grouping) ---
-        if self.attributes.friend_ids or self.attributes.partner_id:
-            avg_x, avg_y = 0, 0
-            count = 0
-            
-            if self.attributes.partner_id:
-                p = world.agents.get(self.attributes.partner_id)
-                if p:
-                    avg_x += p.x
-                    avg_y += p.y
-                    count += 1
-            
-            for fid in self.attributes.friend_ids:
-                f = world.agents.get(fid)
-                if f:
-                    avg_x += f.x
-                    avg_y += f.y
-                    count += 1
-            
-            if count > 0:
-                avg_x /= count
-                avg_y /= count
-                
-                # Gentle Cohesion (Vector Bias) instead of Override
-                # If wandering, slightly pull towards group
-                if self.immediate_goal == "Wandering":
-                     bias_x = 0
-                     bias_y = 0
-                     if avg_x > self.x + 5: bias_x = 1
-                     elif avg_x < self.x - 5: bias_x = -1
-                     
-                     if avg_y > self.y + 5: bias_y = 1
-                     elif avg_y < self.y - 5: bias_y = -1
-                     
-                     # 30% chance to apply bias if moving away
-                     if np.random.random() < 0.3:
-                         if bias_x != 0: move_x = bias_x
-                         if bias_y != 0: move_y = bias_y
-        
-        world.move_agent(self.id, move_x, move_y)
-        
-        # Creativity: Experimentation
-        if self.attributes.personality_vector["Creativity"] > 0.7 and np.random.random() < 0.05:
-            # Try to craft something random
-            self.craft(world) # Craft method has random selection logic now
-            self.log_diary("I felt creative and tried to make something.")
-
-    def perceive(self, world):
-        """
-        Detects objects within radius 20 with probability decreasing by distance.
-        Returns dict of visible agents, animals, items.
-        """
-        radius = 20
-        visible = {'agents': [], 'animals': [], 'items': []}
-        
-        # Agents
-        for other in world.agents.values():
-            if other.id == self.id: continue
-            dist = np.sqrt((self.x - other.x)**2 + (self.y - other.y)**2)
-            if dist < radius:
-                prob = 1.0 - (dist / radius)
-                if np.random.random() < prob:
-                    visible['agents'].append({'agent': other, 'dist': dist})
-        
-        # Sort by distance
-        visible['agents'].sort(key=lambda x: x['dist'])
-        
-        # Animals
-        for animal in world.animals:
-            dist = np.sqrt((self.x - animal.x)**2 + (self.y - animal.y)**2)
-            if dist < radius:
-                prob = 1.0 - (dist / radius)
-                if np.random.random() < prob:
-                    visible['animals'].append(animal)
-                    
-        # Items
-        for (ix, iy), items in world.items_grid.items():
-            dist = np.sqrt((self.x - ix)**2 + (self.y - iy)**2)
-            if dist < radius:
-                # Guaranteed vision if close, probabilistic if far
-                prob = 1.0 if dist < 10 else 1.0 - (dist / radius)
-                if np.random.random() < prob:
-                    for item in items:
-                        visible['items'].append({'item': item, 'x': ix, 'y': iy})
-        
-        return visible
     
-    def has_reached_target(self, target):
-        dist = np.sqrt((self.x - target[0])**2 + (self.y - target[1])**2)
-        return dist < 2.0
-
-    def explore(self, world):
-        # Random walk
-        dx, dy = np.random.randint(-1, 2), np.random.randint(-1, 2)
-        world.move_agent(self.id, dx, dy)
-
-    def gather(self, world):
-        # Try to pick up item at current location
-        items = world.items_grid.get((self.x, self.y))
-        if items:
-            item = items.pop(0) # Take first item
-            if not items:
-                del world.items_grid[(self.x, self.y)]
-            
-            # Add to inventory
-            found = False
-            for slot in self.inventory:
-                if slot['item']['id'] == item.id: # Same item type? No, ID is unique. Check Name/Type
-                    # Simplified stacking by name for now
-                    if slot['item']['name'] == item.name:
-                        slot['count'] += 1
-                        found = True
-                        break
-            
-            if not found:
-                self.inventory.append({'item': item.to_dict(), 'count': 1})
-            
-            self.log_diary(f"I gathered {item.name}.")
-            self.add_memory(f"Found {item.name} at {self.x},{self.y}")
-
-    def eat_from_inventory(self):
-        """Consumes food from inventory."""
-        for i, slot in enumerate(self.inventory):
-            if "consumable" in slot['item']['tags']:
-                slot['count'] -= 1
-                self.state.hunger = max(0, self.state.hunger - 0.5) # Eat restores 0.5 hunger
-                self.log_diary(f"I ate a {slot['item']['name']} from my bag.")
-                self.add_memory(f"Ate {slot['item']['name']}", type="survival", impact=0.2)
-                
-                if slot['count'] <= 0:
-                    self.inventory.pop(i)
-                return True
-        return False
-
-    def craft(self, world):
-        # Check for possible recipes
-        possible_recipes = []
-        inventory_counts = {}
-        for slot in self.inventory:
-            name = slot['item']['name']
-            inventory_counts[name] = inventory_counts.get(name, 0) + slot['count']
-            
-        for recipe_name, ingredients in RECIPES.items():
-            can_craft = True
-            for item_name, count in ingredients.items():
-                if inventory_counts.get(item_name, 0) < count:
-                    can_craft = False
-                    break
-            if can_craft:
-                possible_recipes.append(recipe_name)
-        
-        if possible_recipes:
-            # Pick one (Random for now, later based on needs)
-            # Priority: Tools > Survival > Luxury
-            # Simple heuristic: If we don't have it, craft it
-            target_recipe = None
-            
-            # Check what we already have equipped or in inventory
-            owned_items = [slot['item']['name'] for slot in self.inventory]
-            
-            for recipe in possible_recipes:
-                if recipe not in owned_items:
-                    target_recipe = recipe
-                    break
-            
-            if not target_recipe:
-                target_recipe = np.random.choice(possible_recipes)
-            
-            # Consume Ingredients
-            ingredients = RECIPES[target_recipe]
-            for item_name, count in ingredients.items():
-                removed = 0
-                # Iterate backwards to safely remove
-                for i in range(len(self.inventory) - 1, -1, -1):
-                    if self.inventory[i]['item']['name'] == item_name:
-                        take = min(count - removed, self.inventory[i]['count'])
-                        self.inventory[i]['count'] -= take
-                        removed += take
-                        if self.inventory[i]['count'] == 0:
-                            self.inventory.pop(i)
-                        if removed >= count:
-                            break
-                            
-            # Create Item
-            from ..env.item import Item
-            import uuid
-            
-            # Determine tags based on type
-            tags = ["craftable"]
-            if target_recipe in ["Hammer", "Axe", "Pickaxe"]: tags.append("tool")
-            elif target_recipe in ["Spear", "Shield"]: tags.append("weapon")
-            elif target_recipe in ["Campfire", "Wall", "Chest", "Bed"]: tags.append("building")
-            elif target_recipe in ["Leather Bag", "Clothes"]: tags.append("equipment")
-            
-            new_item = Item(id=f"{target_recipe.lower()}_{uuid.uuid4()}", name=target_recipe, weight=1.0, hardness=1.0, durability=1.0, tags=tags)
-            self.inventory.append({'item': new_item.to_dict(), 'count': 1})
-            
-            self.log_diary(f"I crafted a {target_recipe}!")
-            self.add_memory(f"Crafted {target_recipe} successfully.")
-        else:
-            self.log_diary("I wanted to craft but didn't have enough materials.")
-
-    def socialize(self, world):
-        # Find nearest agent
-        nearest = None
-        min_dist = float('inf')
-        for other in world.agents.values():
-            if other.id == self.id: continue
-            dist = np.sqrt((self.x - other.x)**2 + (self.y - other.y)**2)
-            if dist < min_dist:
-                min_dist = dist
-                nearest = other
-        
-        if nearest and min_dist < 5:
-            self.communicate(nearest, world)
-            
-    def communicate(self, partner, world):
-        # Check Cooldown (Survival Priority)
-        if getattr(self, 'social_cooldown', 0) > world.time_step:
-            return # I need to eat/run, no chatting!
-            
-        # 1. Determine Opinion
-        opinion = self.opinions.get(partner.id, 0.0)
-        
-        # 2. Decide Action based on Opinion + Personality
-        # Friendly/Social agents are nicer even with neutral opinion
-        base_attitude = self.attributes.personality_vector["Social"] - self.attributes.personality_vector["Aggression"]
-        effective_opinion = opinion + base_attitude
-        
-        # Likeness Score (Personality Similarity)
-        p1 = np.array(list(self.attributes.personality_vector.values()))
-        p2 = np.array(list(partner.attributes.personality_vector.values()))
-        # Euclidean distance, inverted and scaled. Max dist approx sqrt(20) ~ 4.5. 
-        dist = np.linalg.norm(p1 - p2)
-        likeness = max(0, (5.0 - dist) * 2.5) # Scale roughly 0-12.5
-        
-        # --- PATH A: LOVE & REPRODUCTION ---
-        if likeness > 10 and self.attributes.gender != partner.attributes.gender:
-            # Potential Match
-            if not self.attributes.partner_id and not partner.attributes.partner_id:
-                 # Romance Bloom
-                 if np.random.random() < 0.6:
-                    self.attributes.partner_id = partner.id
-                    partner.attributes.partner_id = self.id
-                    self.log_diary(f"I fell deeply in love with {partner.attributes.name}!")
-                    partner.log_diary(f"I found my soulmate in {self.attributes.name}!")
-                    partner.log_diary(f"I found my soulmate in {self.attributes.name}!")
-                    if hasattr(self.state, 'last_interaction'): self.state.last_interaction["type"] = "love"
-                    
-                    # Love Lock (Long)
-                    self.state.busy_until = world.time_step + 20
-                    partner.state.busy_until = world.time_step + 20
-
-            if self.attributes.partner_id == partner.id:
-                # Existing Partners: Reproduce
-                if np.random.random() < 0.2: # 20% chance if they meet
-                    if hasattr(self.state, 'last_interaction'): self.state.last_interaction["type"] = "reproduce"
-                    self.reproduce(partner, world)
-                    return # Busy making baby
-        
-        elif likeness > 6:
-             # Friend
-            if partner.id not in self.attributes.friend_ids:
-                if np.random.random() < 0.2:
-                    self.attributes.friend_ids.append(partner.id)
-                    self.log_diary(f"I made friends with {partner.attributes.name}.")
-
-        # --- PATH B: HATE & MURDER ---
-        # Trigger: Hated Opinion + High Aggression + Low Empathy
-        if effective_opinion < -0.8:
-            if self.attributes.aggression > 0.7 and self.attributes.personality_vector["Empathy"] < 0.3:
-                # Murder Logic
-                if np.random.random() < 0.1: # 10% chance to act on impulse
-                    self.log_diary(f"I couldn't take it anymore. I attacked {partner.attributes.name}!")
-                    if hasattr(self.state, 'last_interaction'): self.state.last_interaction["type"] = "combat"
-                    
-                    # Combat Lock (Medium)
-                    self.state.busy_until = world.time_step + 15
-                    partner.state.busy_until = world.time_step + 15
-                    
-                    # Simple Combat logic
-                    my_score = self.attributes.aggression * self.state.health
-                    their_score = partner.attributes.aggression * partner.state.health
-                    
-                    if my_score > their_score:
-                        self.log_diary(f"I killed {partner.attributes.name}.")
-                        partner.die(world, f"murdered by {self.attributes.name}")
-                        self.attributes.personality_vector["Aggression"] = min(1.0, self.attributes.personality_vector["Aggression"] + 0.1)
-                        # Remove from opinions if dead? Or keep memory? Keep memory.
-                        return
-                    else:
-                        self.log_diary(f"I tried to kill {partner.attributes.name} but failed.")
-                        partner.log_diary(f"{self.attributes.name} tried to kill me!")
-                        partner.opinions[self.id] = -1.0 # Eternal Enemy
-                        if hasattr(self.state, 'last_interaction'): self.state.last_interaction["type"] = "combat"
-
-        # --- PATH C: NORMAL SOCIAL ---
-        if effective_opinion > 0.2:
-            # Positive: Help / Gift / Share Info
-            # Locked Duration depends on closeness
-            duration = 5
-            if effective_opinion > 0.6: duration = 15 # Close friends talk longer
-            
-            self.state.busy_until = world.time_step + duration
-            partner.state.busy_until = world.time_step + duration
-
-            if np.random.random() < 0.5:
-                # Share Knowledge
-                if self.knowledge:
-                    info = np.random.choice(self.knowledge)
-                    if info not in partner.knowledge:
-                        partner.knowledge.append(info)
-                        partner.log_diary(f"{self.attributes.name} told me about {info}.")
-                        self.log_diary(f"I told {partner.attributes.name} about {info}.")
-                        # Boost opinion (Tit for Tat)
-                        partner.opinions[self.id] = partner.opinions.get(self.id, 0.0) + 0.1
-        elif effective_opinion < -0.2:
-            # Negative: Avoid / Trap
-            self.log_diary(f"I avoided {partner.attributes.name}.")
-            # Decrease opinion slightly
-            self.opinions[partner.id] = self.opinions.get(partner.id, 0.0) - 0.05
-            if hasattr(self.state, 'last_interaction'): self.state.last_interaction["type"] = "conflict"
-            # No lock for avoidance
-        else:
-            # Neutral
-            self.log_diary(f"I chatted with {partner.attributes.name}.")
-            # Small familiarity boost
-            self.opinions[partner.id] = self.opinions.get(partner.id, 0.0) + 0.01
-            # Short Lock
-            self.state.busy_until = world.time_step + 4
-            partner.state.busy_until = world.time_step + 4
-
-        # Ensure opinion exists
-        if partner.id not in self.opinions:
-             self.opinions[partner.id] = 0.0
-             
-        # Reciprocal update for partner (simplified)
-        if self.id not in partner.opinions:
-            partner.opinions[self.id] = 0.0
-            
-        # LOCK AGENTS (Face-to-Face Waiting)
-        # If any significant interaction happened (Love, Fight, Reproduce, or just Chat)
-        # Set busy_until for both agents to freeze them
-        # --- PATH C: NEUTRAL / TRADE ---
-        # Casual Chat
-        # The busy_until logic is now handled within each path (Love, Friend, Hate, Positive, Negative, Neutral)
-        # This ensures specific durations for specific interactions.
-        
-        # Trade Check (Can happen during any non-hostile interaction)
-        if effective_opinion >= -0.2: # Don't trade with someone you hate
-            self.trade(partner, world)
-
-        # Update Opinions
-        self.opinions[partner.id] = np.clip(effective_opinion, -1.0, 1.0)
-        if hasattr(self.state, 'last_interaction'): self.state.last_interaction["partner"] = partner.id
-
-    def trade(self, partner, world) -> bool:
-        """
-        Simple Trade Logic: Give surplus items to friends/needs.
-        """
-        # 1. Identify Needs
-        my_needs = []
-        if self.state.hunger > 0.4: my_needs.append("food")
-        
-        partner_needs = []
-        if partner.state.hunger > 0.4: partner_needs.append("food")
-        
-        # 2. Check Inventory (Surplus)
-        for i, slot in enumerate(self.inventory):
-            item = slot['item']
-            count = slot['count']
-            
-            # Give Food if partner needs it and we have enough
-            if "food" in partner_needs and "consumable" in item["tags"]:
-                 if count > 1 or (self.state.hunger < 0.2 and count >= 1):
-                     # GIVE ITEM
-                     slot['count'] -= 1
-                     if slot['count'] <= 0: self.inventory.pop(i)
-                     
-                     # Add to partner
-                     partner.inventory.append({'item': item, 'count': 1})
-                     
-                     self.log_diary(f"I gave {item['name']} to {partner.attributes.name}.")
-                     partner.log_diary(f"{self.attributes.name} gave me {item['name']}! Thanks!")
-                     
-                     # Boost Opinion
-                     partner.opinions[self.id] = min(1.0, partner.opinions.get(self.id, 0) + 0.2)
-                     return True
-        
-        return False
-
     def get_observation(self, world):
         """
         Constructs the observation vector for the RL brain.
-        Must match the observation space in AdamBaseEnv.
+        Matches AdamBaseEnv space (77 floats).
         """
-        # Construct 5x5 grid observation (Simplified for now as per envs.py)
-        # Vision: Just relative vector to nearest food + internal state
-        
-        # Find nearest food
-        nearest_dist = float('inf')
-        fx, fy = 0, 0
-        
-        # Note: World in main sim might use different food structure than TestWorld
-        # TestWorld uses set of tuples. Main World uses list of objects or similar?
-        # Let's assume TestWorld structure for now or check.
-        # Main World does NOT have food_grid set. It has items? Or resource spawning?
-        # Main World has 'respawn_resources' but we didn't check how it stores food.
-        # Checking envs.py: self.world.food_grid.add((fx, fy))
-        
-        # We need to support both.
-        # If world has food_grid (TestWorld), use it.
-        # If world is Main World, we need to find "Food" items.
-        
-        food_locations = []
-        if hasattr(world, 'food_grid') and world.food_grid:
-            food_locations = list(world.food_grid)
-        elif hasattr(world, 'animals'):
-             # Treat animals as food for the "Find Food" brain
-             food_locations = [(a.x, a.y) for a in world.animals]
-             
-        for (fdx, fdy) in food_locations:
-            dist = abs(fdx - self.x) + abs(fdy - self.y)
-            if dist < nearest_dist:
-                nearest_dist = dist
-                fx, fy = fdx, fdy
-        
-        # Normalize relative position
-        # Width/Height might be on world
-        width = getattr(world, 'width', 200)
-        height = getattr(world, 'height', 200)
-        
-        rel_x = (fx - self.x) / width
-        rel_y = (fy - self.y) / height
-        
-        # Placeholder for full grid
+        # 5x5 Grid around agent
         obs = np.zeros(77, dtype=np.float32)
-        obs[0] = rel_x
-        obs[1] = rel_y
-        obs[2] = self.state.hunger
+        
+        # Fill grid
+        # Channels: 0: EntityType (1=Agent, 0.5=Animal), 1: ID (Hash?), 2: Property (Hunger/Health?)
+        # Simplified: Channel 0: Obstacle/Terrain, 1: Food/Item, 2: Agent/Animal
+        
+        idx = 0
+        grid_radius = 2 # 5x5
+        
+        for dy in range(-grid_radius, grid_radius + 1):
+            for dx in range(-grid_radius, grid_radius + 1):
+                tx = self.x + dx
+                ty = self.y + dy
+                
+                # Bounds check
+                if 0 <= tx < world.width and 0 <= ty < world.height:
+                    # Ch 0: Terrain
+                    t_type = world.terrain_grid[ty][tx]
+                    if t_type == 0: obs[idx] = 1.0 # Water (Blocked)
+                    else: obs[idx] = 0.0
+                    
+                    # Ch 1: Food
+                    # Check items
+                    if (tx, ty) in world.items_grid:
+                        # Assuming any item is 'food' for basic brain
+                        obs[idx+1] = 1.0 
+                    
+                    # Ch 2: Agent
+                    if world._get_agent_at(tx, ty):
+                        obs[idx+2] = 1.0
+                else:
+                    # Out of bounds is wall
+                    obs[idx] = 1.0
+                
+                idx += 3
+        
+        # Internal State (Last 2)
+        obs[75] = self.nafs.hunger
+        obs[76] = self.state.health
         
         return obs
 
-    def load_brain(self, path: str):
-        """Loads a trained PPO model as the agent's brain."""
-        try:
-            from stable_baselines3 import PPO
-            self.brain = PPO.load(path)
-            print(f"Agent {self.attributes.name} loaded brain from {path}")
-        except Exception as e:
-            print(f"Failed to load brain for agent {self.attributes.name}: {e}")
-            self.brain = None
-            
-    def act_smart(self, world):
-        """Uses the RL brain to decide action."""
-        if hasattr(self, 'brain') and self.brain:
-            obs = self.get_observation(world)
-            action, _ = self.brain.predict(obs)
-            return int(action)
-        return None
-
-    def _assign_strategy(self, p: Dict[str, float]) -> GameStrategy:
-        # Map personality to Game Theory Strategy
-        # High Aggression -> Defect
-        if p["Aggression"] > 0.8 or p["Selfishness"] > 0.8:
-            return GameStrategy.ALWAYS_DEFECT
+    # --- COMPATIBILITY SHIMS ---
+    
+    def load_brain(self, path):
+        self.qalb.load_brain(path)
         
-        # High Altruism + Naivety (Low Skepticism) -> Always Cooperate
-        if p["Altruism"] > 0.7 and p.get("Skepticism", 0.5) < 0.3:
-            return GameStrategy.ALWAYS_COOPERATE
-            
-        # Vengeful -> Grim Trigger
-        if p.get("Vengefulness", 0.5) > 0.8:
-            return GameStrategy.GRIM_TRIGGER
-            
-        # Logical/Adaptive -> Pavlov or TitForTat
-        if p.get("Logic", 0.5) > 0.7:
-             if np.random.random() < 0.5: return GameStrategy.PAVLOV
-             else: return GameStrategy.TIT_FOR_TAT
-             
-        # Default -> Tit For Tat (Robust)
-        return GameStrategy.TIT_FOR_TAT
+    def act_smart(self, world):
+        pass
+
+

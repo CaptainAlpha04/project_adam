@@ -102,7 +102,7 @@ const MapCanvas = ({ gameState, selectedAgentId, onSelectAgent }) => {
         if (!agent.opinions) return;
 
         Object.entries(agent.opinions).forEach(([targetId, score]) => {
-          if (Math.abs(score) < 0.1) return; // Ignore weak opinions
+          if (Math.abs(score) < 0.001) return; // Show almost all connections
 
           const target = agentMap.get(targetId);
           if (target) {
@@ -165,6 +165,12 @@ const MapCanvas = ({ gameState, selectedAgentId, onSelectAgent }) => {
           ctx.fillText(agent.attributes.name, agent.x * TILE_SIZE + TILE_SIZE / 2, agent.y * TILE_SIZE - 2);
         }
       });
+    }
+
+    // 5. Day/Night Cycle Overlay
+    if (gameState.is_day === false) { // Night
+      ctx.fillStyle = 'rgba(0, 0, 20, 0.5)'; // Dark Blue Overlay
+      ctx.fillRect(0, 0, 800 * 5, 600 * 5); // Cover everything (huge rect)
     }
 
     ctx.restore();

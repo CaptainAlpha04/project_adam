@@ -77,6 +77,19 @@ def set_speed(speed: float):
     SIMULATION_SPEED = max(0.0001, min(2.0, speed))
     return {"message": "Speed updated", "speed": SIMULATION_SPEED}
 
+# --- JSON Encoder for Numpy ---
+class NumpyEncoder(json.JSONEncoder):
+    def default(self, obj):
+        if isinstance(obj, np.integer):
+            return int(obj)
+        if isinstance(obj, np.floating):
+            return float(obj)
+        if isinstance(obj, np.ndarray):
+            return obj.tolist()
+        if isinstance(obj, np.bool_):
+            return bool(obj)
+        return super(NumpyEncoder, self).default(obj)
+
 @app.websocket("/ws")
 async def websocket_endpoint(websocket: WebSocket):
     await websocket.accept()
@@ -98,6 +111,7 @@ async def websocket_endpoint(websocket: WebSocket):
     receive_task = asyncio.create_task(receive_commands())
 
     try:
+        print("WS: Starting loop")
         while True:
             paused = getattr(world, 'paused', False)
             if not paused:
@@ -108,31 +122,50 @@ async def websocket_endpoint(websocket: WebSocket):
                 elif SIMULATION_SPEED < 0.01: steps_per_frame = 10
                 elif SIMULATION_SPEED < 0.05: steps_per_frame = 5
                 
-                for _ in range(steps_per_frame):
-                    # Run one simulation step
-                    # Agents
-                    agents = list(world.agents.values())
-                    for agent in agents:
-                        if agent.id not in world.agents: continue # Died during this step
-                        try:
-                            agent.act(world.time_step, world)
-                        except TypeError:
-                             # Fallback if signature mismatch during dev
-                             agent.act(np.random.randint(0,6), world)
-                    
-                    # Animals
-                    for animal in world.animals:
-                        animal.act(world)
-                    
-                    # Respawn Resources
-                    world.respawn_resources()
-                    
-                    world.time_step += 1
+                try:
+                    for _ in range(steps_per_frame):
+                        # Run one simulation step
+                        # Agents
+                        agents = list(world.agents.values())
+                        for agent in agents:
+                            if agent.id not in world.agents: continue # Died during this step
+                            try:
+                                agent.act(world.time_step, world)
+                            except TypeError as e:
+                                 # Fallback if signature mismatch during dev
+                                 print(f"WS: Error in agent.act: {e}")
+                                 agent.act(np.random.randint(0,6), world)
+                            except Exception as e:
+                                print(f"WS: Critical error in agent.act: {e}")
+                        
+                        # Animals
+                        for animal in world.animals:
+                            animal.act(world)
+                        
+                        # Respawn Resources
+                        world.respawn_resources()
+                        
+                        world.time_step += 1
+                except Exception as e:
+                    print(f"WS: Error in Simulation Step: {e}")
             
             # Send state to frontend (only once per frame)
-            state = world.get_state()
-            state["paused"] = paused
-            await websocket.send_text(json.dumps(state))
+            try:
+                state = world.get_state()
+                state["paused"] = paused
+                # print(f"WS: Sending state for step {state['time_step']}")
+                await websocket.send_text(json.dumps(state, cls=NumpyEncoder))
+            except RuntimeError as e:
+                # Catch "Cannot call 'send' once a close message has been sent"
+                if "close message" in str(e):
+                    print("WS: Connection closed during send.")
+                    break
+                else:
+                    print(f"WS: RuntimeError sending state: {e}")
+            except Exception as e:
+                print(f"WS: Error sending state: {e}")
+                # Retry or break?
+                await asyncio.sleep(1)
             
             # Control simulation speed
             # If fast forwarding, minimum sleep to yield to event loop
@@ -141,9 +174,12 @@ async def websocket_endpoint(websocket: WebSocket):
     except WebSocketDisconnect:
         print("Client disconnected")
         receive_task.cancel()
+    except Exception as e:
+        print(f"WS: Fatal Error in loop: {e}")
+        receive_task.cancel()
 
 # Wrap with Socket.IO (Must be done after all routes are defined)
 app = socketio.ASGIApp(sio, app)
 
 if __name__ == "__main__":
-    uvicorn.run("app.main:app", host="0.0.0.0", port=8000, reload=True)
+    uvicorn.run("backend.app.main:app", host="0.0.0.0", port=8000, reload=True)

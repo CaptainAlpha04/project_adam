@@ -68,172 +68,17 @@ class AdamBaseEnv(gym.Env):
         if action == 5:
             if (self.agent.x, self.agent.y) in self.world.food_grid:
                 self.world.food_grid.remove((self.agent.x, self.agent.y))
-                self.agent.state.hunger = max(0, self.agent.state.hunger - 0.5)
+                self.agent.needs.hunger = max(0, self.agent.needs.hunger - 0.5)
                 reward += 10.0 # Big reward for eating
                 # Respawn food to keep episode going
                 fx, fy = np.random.randint(0, self.width), np.random.randint(0, self.height)
                 self.world.food_grid.add((fx, fy))
         
         # Update State
-        self.agent.state.hunger += 0.005
+        self.agent.needs.hunger += 0.005
         
         # Check Death
-        if self.agent.state.hunger >= 1.0:
-            reward -= 10.0 # Death penalty
-            terminated = True
-            
-        # Max steps truncation handled by wrapper usually, but can add here
-        
-        return self._get_obs(), reward, terminated, truncated, {}
-
-    def _get_obs(self):
-        # Construct 5x5 grid observation
-        # For now, simplified: Just relative vector to nearest food + internal state
-        
-        # Find nearest food
-        nearest_dist = float('inf')
-        fx, fy = 0, 0
-        for (fdx, fdy) in self.world.food_grid:
-            dist = abs(fdx - self.agent.x) + abs(fdy - self.agent.y)
-            if dist < nearest_dist:
-                nearest_dist = dist
-                fx, fy = fdx, fdy
-        
-        # Normalize relative position
-        rel_x = (fx - self.agent.x) / self.width
-        rel_y = (fy - self.agent.y) / self.height
-        
-        # Placeholder for full grid
-        obs = np.zeros(77, dtype=np.float32)
-        obs[0] = rel_x
-        obs[1] = rel_y
-        obs[2] = self.agent.state.hunger
-        
-        return obs
-
-    def render(self):
-        if self.render_mode == "ascii":
-            grid = [['.' for _ in range(self.width)] for _ in range(self.height)]
-            
-            for (fx, fy) in self.world.food_grid:
-                grid[fy][fx] = 'F'
-                
-            grid[self.agent.y][self.agent.x] = 'A'
-            
-            print("-" * (self.width + 2))
-            for row in grid:
-                print("|" + "".join(row) + "|")
-            print("-" * (self.width + 2))
-            print(f"Hunger: {self.agent.state.hunger:.2f}")
-
-class MovementEnv(AdamBaseEnv):
-    """
-    Scenario: Learn to move towards food.
-    """
-    def __init__(self, **kwargs):
-        super().__init__(**kwargs)
-
-class CraftingEnv(AdamBaseEnv):
-    """
-    Scenario: Learn to gather resources and craft.
-    """
-    def reset(self, seed=None, options=None):
-        obs, info = super().reset(seed=seed)
-        # Spawn Trees and Rocks
-        self.world.items_grid = {} # Clear items
-        for _ in range(10):
-            tx, ty = np.random.randint(0, self.width), np.random.randint(0, self.height)
-            self.world.items_grid[(tx, ty)] = {'type': 'tree', 'amount': 10}
-            
-            rx, ry = np.random.randint(0, self.width), np.random.randint(0, self.height)
-            self.world.items_grid[(rx, ry)] = {'type': 'rock', 'amount': 10}
-        return obs, info
-
-    def step(self, action):
-        # Action 5 is Interact (Gather/Craft)
-        obs, reward, terminated, truncated, info = super().step(action)
-        
-import gymnasium as gym
-from gymnasium import spaces
-import numpy as np
-from typing import Optional
-from ..env.test_world import TestWorld
-from ..agents.agent import Agent
-
-class AdamBaseEnv(gym.Env):
-    """
-    Base Gym Environment for Adam Agents.
-    Observation: Local Grid (Vision) + Internal State (Hunger, Health)
-    Action: Discrete (Move, Interact, Craft)
-    """
-    metadata = {"render_modes": ["human", "ascii"], "render_fps": 4}
-
-    def __init__(self, render_mode=None, width=20, height=20):
-        self.width = width
-        self.height = height
-        self.render_mode = render_mode
-        
-        # Action Space: 
-        # 0: Stay, 1: Up, 2: Down, 3: Left, 4: Right, 5: Eat/Interact
-        self.action_space = spaces.Discrete(6)
-        
-        # Observation Space:
-        # Vision: 5x5 grid around agent. Each cell has 3 channels (Entity Type, ID, Property)
-        # Internal: Hunger (0-1), Health (0-1)
-        # Flattened for simplicity initially: 5*5*3 + 2 = 77
-        self.observation_space = spaces.Box(low=0, high=1, shape=(77,), dtype=np.float32)
-        
-        self.world = TestWorld(width=width, height=height, num_agents=0) # Managed manually
-        self.agent: Optional[Agent] = None
-
-    def reset(self, seed=None, options=None):
-        super().reset(seed=seed)
-        
-        # Reset World
-        self.world = TestWorld(width=self.width, height=self.height, num_agents=0)
-        
-        # Spawn Agent
-        self.world.spawn_agent()
-        self.agent = list(self.world.agents.values())[0]
-        
-        # Spawn Food (Scenario specific, but base needs some)
-        for _ in range(5):
-            fx, fy = np.random.randint(0, self.width), np.random.randint(0, self.height)
-            self.world.food_grid.add((fx, fy))
-            
-        return self._get_obs(), {}
-
-    def step(self, action):
-        # Decode Action
-        dx, dy = 0, 0
-        if action == 1: dy = -1
-        elif action == 2: dy = 1
-        elif action == 3: dx = -1
-        elif action == 4: dx = 1
-        
-        # Execute Move
-        if action in [1, 2, 3, 4]:
-            self.world.move_agent(self.agent.id, dx, dy)
-            
-        # Execute Interact (Eat)
-        reward = -0.01 # Time penalty (Entropy)
-        terminated = False
-        truncated = False
-        
-        if action == 5:
-            if (self.agent.x, self.agent.y) in self.world.food_grid:
-                self.world.food_grid.remove((self.agent.x, self.agent.y))
-                self.agent.state.hunger = max(0, self.agent.state.hunger - 0.5)
-                reward += 10.0 # Big reward for eating
-                # Respawn food to keep episode going
-                fx, fy = np.random.randint(0, self.width), np.random.randint(0, self.height)
-                self.world.food_grid.add((fx, fy))
-        
-        # Update State
-        self.agent.state.hunger += 0.005
-        
-        # Check Death
-        if self.agent.state.hunger >= 1.0:
+        if self.agent.needs.hunger >= 1.0:
             reward -= 10.0 # Death penalty
             terminated = True
             
@@ -260,7 +105,7 @@ class AdamBaseEnv(gym.Env):
             for row in grid:
                 print("|" + "".join(row) + "|")
             print("-" * (self.width + 2))
-            print(f"Hunger: {self.agent.state.hunger:.2f}")
+            print(f"Hunger: {self.agent.needs.hunger:.2f}")
 
 class MovementEnv(AdamBaseEnv):
     """

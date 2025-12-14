@@ -69,7 +69,7 @@ const Dashboard = ({ gameState, onSelectAgent, selectedAgentId }) => {
                         >
                             <span>{agent.attributes.name}</span>
                             <div className="flex gap-1">
-                                <div className={`w-2 h-2 rounded-full ${agent.state.hunger > 0.5 ? 'bg-red-500' : 'bg-green-500'}`} title="Hunger"></div>
+                                <div className={`w-2 h-2 rounded-full ${agent.needs.hunger > 0.5 ? 'bg-red-500' : 'bg-green-500'}`} title="Hunger"></div>
                             </div>
                         </div>
                     ))}
@@ -83,7 +83,18 @@ const Dashboard = ({ gameState, onSelectAgent, selectedAgentId }) => {
                     <div className="bg-gradient-to-r from-yellow-900/50 to-gray-900 p-4 border-b border-yellow-700 flex justify-between items-start">
                         <div>
                             <h2 className="text-2xl font-bold text-yellow-400">{selectedAgent.attributes.name}</h2>
-                            <div className="text-sm text-yellow-200/80 italic">{selectedAgent.attributes.gender} • Gen {selectedAgent.attributes.generation} • {selectedAgent.traits ? selectedAgent.traits.join(", ") : "Unknown"}</div>
+                            <div className="text-sm text-yellow-200/80 italic">
+                                {selectedAgent.attributes.gender} • Gen {selectedAgent.attributes.generation}
+                            </div>
+                            {/* Soul Status Badge */}
+                            <div className="flex gap-2 mt-1">
+                                <span className={`text-[10px] uppercase font-bold px-1 rounded ${selectedAgent.ruh.karma > 0 ? 'bg-blue-900 text-blue-200' : 'bg-red-900 text-red-200'}`}>
+                                    Karma: {selectedAgent.ruh.karma.toFixed(1)}
+                                </span>
+                                <span className="text-[10px] uppercase font-bold px-1 rounded bg-purple-900 text-purple-200">
+                                    Past Lives: {selectedAgent.ruh.past_lives}
+                                </span>
+                            </div>
                         </div>
                         <button onClick={() => onSelectAgent(null)} className="text-yellow-600 hover:text-yellow-400">✕</button>
                     </div>
@@ -91,60 +102,113 @@ const Dashboard = ({ gameState, onSelectAgent, selectedAgentId }) => {
                     {/* Content */}
                     <div className="p-4 overflow-y-auto custom-scrollbar space-y-4">
 
-                        {/* Stats Grid */}
-                        <div className="grid grid-cols-2 gap-4 bg-black/20 p-3 rounded border border-yellow-900/30">
-                            <div>
-                                <div className="text-xs text-gray-400 uppercase tracking-wider">Health</div>
-                                <div className="h-2 bg-gray-700 rounded mt-1 overflow-hidden">
-                                    <div className="h-full bg-red-600" style={{ width: `${selectedAgent.state.health * 100}%` }}></div>
+                        {/* TRI-PARTITE STATS */}
+
+                        {/* 1. NAFS (The Beast) */}
+                        <div className="border border-red-900/30 rounded p-2 bg-red-900/10">
+                            <h3 className="text-red-400 font-bold uppercase text-xs tracking-widest mb-2">Nafs (The Beast)</h3>
+                            <div className="grid grid-cols-2 gap-4">
+                                <div>
+                                    <div className="text-xs text-gray-400 uppercase tracking-wider">Health</div>
+                                    <div className="h-2 bg-gray-700 rounded mt-1 overflow-hidden">
+                                        <div className="h-full bg-red-600" style={{ width: `${selectedAgent.state.health * 100}%` }}></div>
+                                    </div>
                                 </div>
-                            </div>
-                            <div>
-                                <div className="text-xs text-gray-400 uppercase tracking-wider">Happiness</div>
-                                <div className="h-2 bg-gray-700 rounded mt-1 overflow-hidden">
-                                    <div className="h-full bg-green-500" style={{ width: `${selectedAgent.state.happiness * 100}%` }}></div>
+                                <div>
+                                    <div className="text-xs text-gray-400 uppercase tracking-wider">Hunger</div>
+                                    <div className="h-2 bg-gray-700 rounded mt-1 overflow-hidden">
+                                        <div className="h-full bg-orange-500" style={{ width: `${selectedAgent.nafs.hunger * 100}%` }}></div>
+                                    </div>
                                 </div>
-                            </div>
-                            <div>
-                                <div className="text-xs text-gray-400 uppercase tracking-wider">Hunger</div>
-                                <div className="h-2 bg-gray-700 rounded mt-1 overflow-hidden">
-                                    <div className="h-full bg-orange-500" style={{ width: `${selectedAgent.state.hunger * 100}%` }}></div>
+                                <div>
+                                    <div className="text-xs text-gray-400 uppercase tracking-wider">Energy</div>
+                                    <div className="h-2 bg-gray-700 rounded mt-1 overflow-hidden">
+                                        <div className="h-full bg-yellow-500" style={{ width: `${selectedAgent.nafs.energy * 100}%` }}></div>
+                                    </div>
                                 </div>
-                            </div>
-                            <div>
-                                <div className="text-xs text-gray-400 uppercase tracking-wider">Thirst</div>
-                                <div className="h-2 bg-gray-700 rounded mt-1 overflow-hidden">
-                                    <div className="h-full bg-blue-500" style={{ width: `${selectedAgent.state.thirst * 100}%` }}></div>
+                                <div>
+                                    <div className="text-xs text-gray-400 uppercase tracking-wider">Pain</div>
+                                    <div className="h-2 bg-gray-700 rounded mt-1 overflow-hidden">
+                                        <div className="h-full bg-gray-500" style={{ width: `${selectedAgent.nafs.pain * 100}%` }}></div>
+                                    </div>
                                 </div>
                             </div>
                         </div>
 
-                        {/* Goals */}
-                        <div className="space-y-2">
-                            <h3 className="text-yellow-500 font-bold uppercase text-xs tracking-widest border-b border-yellow-900/50 pb-1">Current Objectives</h3>
-                            <div className="grid grid-cols-3 gap-2">
-                                <div className="bg-yellow-900/20 p-2 rounded border border-yellow-900/30">
-                                    <div className="text-[10px] text-red-400 uppercase">Immediate</div>
-                                    <div className="font-bold text-yellow-100 text-xs">{selectedAgent.immediate_goal || "None"}</div>
+                        {/* 2. QALB (The Heart) */}
+                        <div className="border border-green-900/30 rounded p-2 bg-green-900/10">
+                            <h3 className="text-green-400 font-bold uppercase text-xs tracking-widest mb-2">Qalb (The Heart)</h3>
+                            <div className="grid grid-cols-2 gap-4 mb-2">
+                                <div>
+                                    <div className="text-xs text-gray-400 uppercase tracking-wider">Happiness</div>
+                                    <div className="h-2 bg-gray-700 rounded mt-1 overflow-hidden">
+                                        <div className="h-full bg-green-500" style={{ width: `${selectedAgent.state.happiness * 100}%` }}></div>
+                                    </div>
                                 </div>
-                                <div className="bg-yellow-900/20 p-2 rounded border border-yellow-900/30">
-                                    <div className="text-[10px] text-yellow-600 uppercase">Short Term</div>
-                                    <div className="font-bold text-yellow-100 text-xs">{selectedAgent.short_term_goal || "None"}</div>
+                                <div>
+                                    <div className="text-xs text-gray-400 uppercase tracking-wider">Social Battery</div>
+                                    <div className="h-2 bg-gray-700 rounded mt-1 overflow-hidden">
+                                        <div className="h-full bg-blue-500" style={{ width: `${selectedAgent.qalb.social * 100}%` }}></div>
+                                    </div>
                                 </div>
-                                <div className="bg-yellow-900/20 p-2 rounded border border-yellow-900/30">
-                                    <div className="text-[10px] text-blue-400 uppercase">Long Term</div>
-                                    <div className="font-bold text-yellow-100 text-xs">{selectedAgent.long_term_goal || "None"}</div>
+                            </div>
+                            <div className="flex gap-2 text-xs">
+                                <div className="bg-green-900/40 p-2 rounded border border-green-700 flex-1">
+                                    <span className="text-green-300 uppercase font-bold">Emotion:</span> <span className="text-white ml-2">{selectedAgent.qalb.emotional_state}</span>
                                 </div>
+                            </div>
+                        </div>
+
+                        {/* 3. RUH (The Spirit) */}
+                        <div className="border border-purple-900/30 rounded p-2 bg-purple-900/10">
+                            <h3 className="text-purple-400 font-bold uppercase text-xs tracking-widest mb-2">Ruh (The Spirit)</h3>
+                            <div className="flex gap-2 text-xs">
+                                <div className="bg-purple-900/40 p-2 rounded border border-purple-700 flex-1">
+                                    <span className="text-purple-300 uppercase font-bold">Life Goal:</span> <span className="text-white ml-2">{selectedAgent.ruh.life_goal}</span>
+                                </div>
+                                <div className="bg-purple-900/40 p-2 rounded border border-purple-700 flex-1">
+                                    <span className="text-purple-300 uppercase font-bold">Wisdom:</span> <span className="text-white ml-2">{selectedAgent.ruh.wisdom.toFixed(2)}</span>
+                                </div>
+                            </div>
+                        </div>
+
+                        {/* 4. Social Hierarchy & State */}
+                        <div className="border border-yellow-900/40 rounded p-2 bg-yellow-900/10 mb-2">
+                            <h3 className="text-yellow-400 font-bold uppercase text-xs tracking-widest mb-2">Social Status</h3>
+                            <div className="text-xs space-y-1">
+                                {/* Leader */}
+                                <div className="flex justify-between">
+                                    <span className="text-gray-400">Leader:</span>
+                                    <span className="text-yellow-300">
+                                        {selectedAgent.attributes.leader_id ?
+                                            (gameState.agents.find(a => a.id === selectedAgent.attributes.leader_id)?.attributes.name || "Unknown")
+                                            : "None (Independent)"}
+                                    </span>
+                                </div>
+                                {/* Followers */}
+                                <div className="flex justify-between">
+                                    <span className="text-gray-400">Followers:</span>
+                                    <span className="text-white">{selectedAgent.attributes.followers?.length || 0}</span>
+                                </div>
+                                {/* Social Lock */}
+                                {selectedAgent.state.social_lock_target &&
+                                    <div className="bg-blue-900/40 p-1 rounded border border-blue-800 mt-1 flex justify-between items-center animate-pulse">
+                                        <span className="text-blue-300">talking to:</span>
+                                        <span className="text-white font-bold">
+                                            {gameState.agents.find(a => a.id === selectedAgent.state.social_lock_target)?.attributes.name || "Ghost"}
+                                        </span>
+                                    </div>
+                                }
                             </div>
                         </div>
 
                         {/* Personality Vectors */}
                         <div>
-                            <h3 className="text-yellow-500 font-bold uppercase text-xs tracking-widest border-b border-yellow-900/50 pb-1 mb-2">Personality Vectors</h3>
+                            <h3 className="text-yellow-500 font-bold uppercase text-xs tracking-widest border-b border-yellow-900/50 pb-1 mb-2">Personality</h3>
                             <div className="grid grid-cols-2 gap-x-4 gap-y-1 text-xs">
                                 {selectedAgent.attributes.personality_vector && Object.entries(selectedAgent.attributes.personality_vector)
                                     .sort(([, a], [, b]) => b - a) // Sort by value desc
-                                    .slice(0, 10) // Top 10
+                                    .slice(0, 8) // Top 8
                                     .map(([trait, val]) => (
                                         <div key={trait} className="flex justify-between items-center">
                                             <span className="text-gray-400">{trait}</span>
@@ -156,72 +220,153 @@ const Dashboard = ({ gameState, onSelectAgent, selectedAgentId }) => {
                             </div>
                         </div>
 
-                        {/* Opinions */}
+                        {/* Actions & Inventory */}
+                        <div className="grid grid-cols-2 gap-2">
+                            <div>
+                                <h3 className="text-yellow-500 font-bold uppercase text-xs tracking-widest border-b border-yellow-900/50 pb-1 mb-2">Inventory</h3>
+                                <div className="flex gap-1 flex-wrap">
+                                    {selectedAgent.inventory.length === 0 && <span className="text-gray-500 text-sm italic">Empty</span>}
+                                    {selectedAgent.inventory.map((slot, i) => (
+                                        <div key={i} className="bg-gray-800 px-2 py-1 rounded border border-gray-600 text-[10px]" title={slot.item.name}>
+                                            {slot.item.name} ({slot.count})
+                                        </div>
+                                    ))}
+                                </div>
+                            </div>
+                        </div>
                         <div>
                             <h3 className="text-yellow-500 font-bold uppercase text-xs tracking-widest border-b border-yellow-900/50 pb-1 mb-2">Opinions</h3>
                             <div className="max-h-20 overflow-y-auto custom-scrollbar text-xs space-y-1">
-                                {selectedAgent.opinions && Object.keys(selectedAgent.opinions).length > 0 ? (
-                                    Object.entries(selectedAgent.opinions).map(([id, score]) => {
-                                        const agentName = gameState.agents.find(a => a.id === id)?.attributes.name || "Unknown";
-                                        return (
-                                            <div key={id} className="flex justify-between">
-                                                <span className="text-gray-400 truncate w-24" title={id}>{agentName}</span>
-                                                <span className={score > 0 ? "text-green-400" : "text-red-400"}>{score.toFixed(2)}</span>
-                                            </div>
-                                        );
-                                    })
+                                {selectedAgent.qalb.opinions && Object.keys(selectedAgent.qalb.opinions).length > 0 ? (
+                                    Object.entries(selectedAgent.qalb.opinions)
+                                        .sort(([, a], [, b]) => b - a) // Sort by score deg
+                                        .map(([id, score]) => {
+                                            const agentName = gameState.agents.find(a => a.id === id)?.attributes.name || "Unknown";
+                                            return (
+                                                <div key={id} className="flex justify-between">
+                                                    <span className="text-gray-400 truncate w-16" title={id}>{agentName}</span>
+                                                    <span className={score > 5 ? "text-green-300 font-bold" : score > 0 ? "text-green-500" : score < -5 ? "text-red-500 font-bold" : "text-red-400"}>
+                                                        {score.toFixed(2)}
+                                                    </span>
+                                                </div>
+                                            );
+                                        })
                                 ) : (
-                                    <div className="italic text-gray-500">No strong opinions yet.</div>
+                                    <div className="italic text-gray-500">No opinions yet</div>
                                 )}
                             </div>
                         </div>
 
-                        {/* Inventory */}
-                        <div>
-                            <h3 className="text-yellow-500 font-bold uppercase text-xs tracking-widest border-b border-yellow-900/50 pb-1 mb-2">Inventory</h3>
-                            <div className="flex gap-2 flex-wrap">
-                                {selectedAgent.inventory.length === 0 && <span className="text-gray-500 text-sm italic">Empty</span>}
-                                {selectedAgent.inventory.map((slot, i) => (
-                                    <div key={i} className="bg-gray-800 px-2 py-1 rounded border border-gray-600 text-xs flex items-center gap-2" title={slot.item.tags.join(", ")}>
-                                        <span className="text-gray-300">{slot.item.name}</span>
-                                        <span className="bg-gray-700 text-white px-1 rounded text-[10px]">{slot.count}</span>
-                                    </div>
-                                ))}
-                            </div>
-                        </div>
-
-                        {/* Memory / Diary */}
-                        <div>
-                            <h3 className="text-yellow-500 font-bold uppercase text-xs tracking-widest border-b border-yellow-900/50 pb-1 mb-2">Recent Memories</h3>
-                            <div className="space-y-1 max-h-32 overflow-y-auto text-sm text-gray-300 custom-scrollbar">
-                                {selectedAgent.memory && selectedAgent.memory.length > 0 ? (
-                                    selectedAgent.memory.slice().reverse().map((mem, i) => (
-                                        <div key={i} className="border-l-2 border-gray-700 pl-2 py-0.5">
-                                            <span className="text-yellow-500 font-bold">[{mem.type}]</span> {mem.description}
-                                        </div>
-                                    ))
-                                ) : (
-                                    <div className="italic text-gray-500">No memories yet...</div>
-                                )}
-                            </div>
-                        </div>
-
-                        {/* Full Diary Link/Toggle */}
-                        <div className="pt-2 border-t border-yellow-900/30">
-                            <details>
-                                <summary className="cursor-pointer text-xs text-yellow-600 hover:text-yellow-400 uppercase font-bold select-none">View Full Diary Log</summary>
-                                <div className="mt-2 max-h-40 overflow-y-auto text-xs font-mono bg-black/30 p-2 rounded text-gray-400 custom-scrollbar">
-                                    {selectedAgent.diary.slice().reverse().map((entry, i) => (
-                                        <div key={i}>{entry}</div>
-                                    ))}
+                        {/* Social Brain (Game Theory) */}
+                        <div className="mb-2">
+                            <h3 className="text-yellow-500 font-bold uppercase text-xs tracking-widest border-b border-yellow-900/50 pb-1 mb-2">Social Brain</h3>
+                            <div className="text-xs space-y-1">
+                                <div className="flex justify-between">
+                                    <span className="text-gray-400">Strategy:</span>
+                                    <span className="text-purple-300 font-bold">{selectedAgent.strategy}</span>
                                 </div>
-                            </details>
+                                <div className="mt-1">
+                                    <span className="text-gray-500 text-[10px] uppercase">Memory of Others:</span>
+                                    <div className="flex gap-1 flex-wrap mt-1">
+                                        {selectedAgent.social_memory && Object.keys(selectedAgent.social_memory).length > 0 ? (
+                                            Object.entries(selectedAgent.social_memory).map(([id, move]) => {
+                                                const name = gameState.agents.find(a => a.id === id)?.attributes.name || "???";
+                                                return (
+                                                    <div key={id} className={`px-2 py-0.5 rounded border text-[10px] ${move === 'cooperate' ? 'bg-green-900/30 border-green-700 text-green-300' : 'bg-red-900/30 border-red-700 text-red-300'}`}>
+                                                        {name}: {move}
+                                                    </div>
+                                                )
+                                            })
+                                        ) : <span className="text-gray-600 italic text-[10px]">Tabula Rasa</span>}
+                                    </div>
+                                </div>
+                            </div>
+                        </div>
+
+                        {/* Tribe & Lineage (Politics) */}
+                        <div className="mb-2">
+                            <h3 className="text-yellow-500 font-bold uppercase text-xs tracking-widest border-b border-yellow-900/50 pb-1 mb-2">Tribe & Lineage</h3>
+                            <div className="grid grid-cols-2 gap-2 text-xs">
+                                <div>
+                                    <span className="text-gray-500 block text-[10px]">Generation</span>
+                                    <span className="text-white font-mono">{selectedAgent.generation}</span>
+                                </div>
+                                <div>
+                                    <span className="text-gray-500 block text-[10px]">Tribe</span>
+                                    <span className="text-yellow-300 font-bold">
+                                        {selectedAgent.tribe_name || "Nomad"}
+                                    </span>
+                                    {/* Role */}
+                                    <div className="text-[9px] text-gray-400">
+                                        {selectedAgent.attributes.leader_id === selectedAgent.id ? "👑 Chief" : (selectedAgent.tribe_id ? "Member" : "Rogue")}
+                                    </div>
+                                </div>
+                                <div className="col-span-2">
+                                    <span className="text-gray-500 block text-[10px]">Orders</span>
+                                    <span className="text-orange-300 font-mono text-[10px] uppercase">
+                                        {selectedAgent.tribe_goal || "Wander"}
+                                    </span>
+                                </div>
+
+                                <div>
+                                    <span className="text-gray-500 block text-[10px]">Leader</span>
+                                    <span className="text-gray-300">
+                                        {selectedAgent.attributes.leader_id
+                                            ? (selectedAgent.attributes.leader_id === selectedAgent.id ? "Self" : gameState.agents.find(a => a.id === selectedAgent.attributes.leader_id)?.attributes.name || "Unknown")
+                                            : "None"}
+                                    </span>
+                                </div>
+                                <div>
+                                    <span className="text-gray-500 block text-[10px]">Partner</span>
+                                    <span className="text-pink-300">
+                                        {selectedAgent.attributes.partner_id
+                                            ? (gameState.agents.find(a => a.id === selectedAgent.attributes.partner_id)?.attributes.name || "Unknown")
+                                            : "-"}
+                                    </span>
+                                </div>
+                                <div className="col-span-2">
+                                    <span className="text-gray-500 block text-[10px]">Social Circle</span>
+                                    <div className="flex gap-2">
+                                        <span className="text-green-400" title="Friends">💚 {selectedAgent.attributes.friend_ids?.length || 0}</span>
+                                        <span className="text-red-400" title="Rivals">⚔️ {Object.values(selectedAgent.qalb?.opinions || {}).filter(v => v <= -30).length}</span>
+                                        <span className="text-blue-400" title="Followers">👥 {gameState.agents.filter(a => a.attributes.leader_id === selectedAgent.id && a.id !== selectedAgent.id).length}</span>
+                                    </div>
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+
+                    {/* Perception (New Section) */}
+                    <div className="mb-2">
+                        <h3 className="text-yellow-500 font-bold uppercase text-xs tracking-widest border-b border-yellow-900/50 pb-1 mb-2">Visual Perception</h3>
+                        <div className="flex gap-1 flex-wrap text-xs">
+                            {selectedAgent.visible_agents && selectedAgent.visible_agents.length > 0 ? (
+                                selectedAgent.visible_agents.map((name, i) => (
+                                    <span key={i} className="bg-blue-900/50 px-2 py-1 rounded border border-blue-700 text-blue-200">
+                                        👁 {name}
+                                    </span>
+                                ))
+                            ) : (
+                                <span className="text-gray-500 italic">No one in sight</span>
+                            )}
+                        </div>
+                    </div>
+
+                    {/* Recent Diary */}
+                    <div>
+                        <div className="flex justify-between items-center border-b border-yellow-900/50 pb-1 mb-2">
+                            <h3 className="text-yellow-500 font-bold uppercase text-xs tracking-widest">Diary of the Soul</h3>
+                        </div>
+                        <div className="mt-2 max-h-32 overflow-y-auto text-xs font-mono bg-black/30 p-2 rounded text-gray-400 custom-scrollbar">
+                            {selectedAgent.diary && selectedAgent.diary.slice().reverse().map((entry, i) => (
+                                <div key={i} className="mb-1">{entry}</div>
+                            ))}
                         </div>
                     </div>
                 </div>
             )}
         </div>
-    );
+    )
 };
 
 export default Dashboard;

@@ -18,7 +18,7 @@ def input_thread(world):
                 print(f"Name: {agent.attributes.name}")
                 print(f"Life: #{agent.past_lives}")
                 print(f"Age: {agent.get_age(world.time_tick)}")
-                print(f"Hunger: {agent.state.hunger:.2f}")
+                print(f"Hunger: {agent.needs.hunger:.2f}")
                 print(f"Memories: {len(agent.memory)}")
                 if agent.memory:
                     print(f"Last Memory: {agent.memory[-1].description}")
