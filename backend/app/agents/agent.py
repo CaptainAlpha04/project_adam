@@ -36,7 +36,8 @@ PERSONALITY_TRAITS = [
     "Empathy", "Selfishness", "Bravery", "Caution", "Energy", 
     "Laziness", "Lust", "Greed", "Altruism", "Resilience",
     "Optimism", "Pessimism", "Ambition", "Modesty", "Humor",
-    "Seriousness", "Forgiveness", "Vengefulness", "Spirituality", "Skepticism"
+    "Seriousness", "Forgiveness", "Vengefulness", "Spirituality", "Skepticism",
+    "Conscientiousness"
 ]
 
 RECIPES = {
@@ -327,37 +328,56 @@ class Qalb:
         else:
             desires["Exploration"] = p["Curiosity"] * 0.3 # Just wandering check
         
-        # 5. Desire for Rest (Energy) - DISABLED
-        # desires["Sleep"] = (1.0 - self.agent.nafs.energy) ** 1.5
-        desires["Sleep"] = 0.0
-
-        # 6. Desire for Achievement (Work)
-        # DAMPENER: If Inventory is full, stop working!
-        inventory_count = sum([s['count'] for s in self.agent.inventory])
-        saturation = min(1.0, inventory_count / 20.0) 
+        # 6. Discrete Productivity Desires (Wood, Stone, Craft)
         
-        if self.agent.nafs.energy > 0.6:
-            base_work_desire = p["Creativity"] * 0.8
-            desires["Work"] = base_work_desire * (1.0 - saturation)
-        else:
-            desires["Work"] = 0.0
-            
-        # TRIBE GOAL BOOST
+        # A. Base Industriousness (Personality)
+        base_labor = p.get("Conscientiousness", 0.5) * 0.5
+        
+        # B. Tribe Influence
         tribe_goal = None
         if self.agent.attributes.tribe_id:
              tribe = world.tribes.get(self.agent.attributes.tribe_id)
              if tribe: tribe_goal = tribe.goal
-             
-        if tribe_goal == "gather_food":
-             desires["Eat"] += 0.3 # Hoarding instinct
-             desires["Work"] += 0.2
-        elif tribe_goal == "gather_wood" or tribe_goal == "gather_stone":
-             desires["Work"] += 0.4 # Duty calls
-             
-        # DISTRACTION: If social opportunity is high, work less
-        # MULTITASKING FIX: We want them to work even if friends are near.
-        # if nearest_agent_dist < 5.0:
-        #     desires["Work"] *= 0.2
+
+        # C. Calculate Specific Desires
+        
+        # Find Food (Gathering)
+        # Driven by Hunger (Forward planning) + Tribe Goal
+        # If hungry, "Eat" is high, but "Find Food" is the means.
+        # Let's keep "Eat" as "I need to consume". Action maps to find_food if no food.
+        # But here we want explicit "Gathering" desire even if not starving (Hoarding).
+        desires["Find Food"] = base_labor * 0.5
+        if tribe_goal == "gather_food": desires["Find Food"] += 0.5
+        if self.agent.nafs.hunger > 0.4: desires["Find Food"] += 0.3
+        
+        # Find Wood
+        desires["Find Wood"] = base_labor
+        if tribe_goal == "gather_wood": desires["Find Wood"] += 0.6
+        
+        # Find Stone
+        desires["Find Stone"] = base_labor
+        if tribe_goal == "gather_stone": desires["Find Stone"] += 0.6
+        
+        # Crafting
+        desires["Craft"] = 0.0
+        # Check if we have Stone (to make Block) or Stone Block (to make Wall)
+        has_stone = any(s['item']['name'] == 'Stone' for s in self.agent.inventory)
+        has_block = any(s['item']['name'] == 'Stone Block' for s in self.agent.inventory)
+        
+        if has_stone: desires["Craft"] += 0.3
+        if has_stone and tribe_goal == "build_home": desires["Craft"] += 0.4
+        
+        # Building
+        desires["Build"] = 0.0
+        if has_block: desires["Build"] += 0.4
+        if has_block and tribe_goal == "build_home": desires["Build"] += 0.6
+        
+        # DAMPENER: Full Inventory
+        inventory_count = sum([s['count'] for s in self.agent.inventory])
+        if inventory_count >= 20:
+            desires["Find Wood"] *= 0.1
+            desires["Find Stone"] *= 0.1
+            desires["Find Food"] *= 0.1
 
         # --- ARBITRATION ---
         
@@ -401,13 +421,20 @@ class Qalb:
             if intensity > 0.3:
                 return {'action': 'socialize', 'desc': "Seeking companionship."}
                 
-        elif dominant_desire == "Work":
-             # Check Tribe Goal
-             res_target = 'wood' # Default
-             if tribe_goal == "gather_stone": res_target = 'stone'
-             elif tribe_goal == "gather_food": res_target = 'food'
+        elif dominant_desire == "Find Food":
+             return {'action': 'find_resource', 'resource': 'food', 'desc': "Gathering food."}
              
-             return {'action': 'find_resource', 'resource': res_target, 'desc': f"Working: {res_target}"}
+        elif dominant_desire == "Find Wood":
+             return {'action': 'find_resource', 'resource': 'wood', 'desc': "Gathering wood."}
+             
+        elif dominant_desire == "Find Stone":
+             return {'action': 'find_resource', 'resource': 'stone', 'desc': "Mining stone."}
+             
+        elif dominant_desire == "Craft":
+             return {'action': 'craft_item', 'target': 'Stone Block', 'desc': "Crafting blocks."}
+             
+        elif dominant_desire == "Build":
+             return {'action': 'build_structure', 'structure': 'Wall', 'desc': "Building boundaries."}
         
         # Default
         return {'action': 'wander', 'desc': "Contemplating existence."}
@@ -638,6 +665,47 @@ class Agent:
              
         elif action == 'socialize':
             self.qalb_socialize(world)
+        
+        elif action == 'craft_item':
+             # Simplified Crafting: Turn Stone -> Stone Block
+             # Logic: Remove 1 Stone, Add 1 Stone Block
+             # Check inventory
+             stones = [s for s in self.inventory if s['item']['name'] == 'Stone']
+             if stones:
+                 # Remove 1 stone
+                 stones[0]['count'] -= 1
+                 if stones[0]['count'] <= 0:
+                     self.inventory.remove(stones[0])
+                     
+                 # Add Stone Block (Magic creation for now, ignoring Item class instantiation detail)
+                 # We need to create specific Item object
+                 from ..env.item import Item
+                 import uuid
+                 block = Item(id=f"sb_{uuid.uuid4()}", name="Stone Block", weight=5.0, hardness=0.8, durability=1.0, tags=["material", "building"])
+                 self._add_to_inventory(block)
+                 self.log_diary("Crafted a Stone Block.")
+             else:
+                 self.log_diary("Failed to craft: No Stone.")
+                 
+        elif action == 'build_structure':
+             # Place Wall
+             items = [s for s in self.inventory if s['item']['name'] == 'Stone Block']
+             if items:
+                 # Consume Block
+                 items[0]['count'] -= 1
+                 if items[0]['count'] <= 0: self.inventory.remove(items[0])
+                 
+                 # Place Wall Item
+                 from ..env.item import Item
+                 import uuid
+                 wall = Item(id=f"wall_{uuid.uuid4()}", name="Wall", weight=100.0, hardness=1.0, durability=10.0, tags=["building", "heavy"])
+                 
+                 # Placement Logic: Near Tribe Center or Self
+                 # For now, place right here. 
+                 world._add_item(self.x, self.y, wall)
+                 self.log_diary("Built a Wall section.")
+             else:
+                 self.log_diary("Cannot build: No Blocks.")
             
         elif action == 'gather_materials':
              self.move_random(world)
