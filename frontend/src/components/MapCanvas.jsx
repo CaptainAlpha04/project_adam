@@ -1,14 +1,14 @@
 import React, { useRef, useEffect, useState } from 'react';
 
-const MapCanvas = ({ gameState, selectedAgentId, onSelectAgent }) => {
+const MapCanvas = ({ gameState, selectedAgentId, onSelectAgent, mapMode = 'TERRAIN' }) => {
   const canvasRef = useRef(null);
   const [offset, setOffset] = useState({ x: 0, y: 0 });
-  const [scale, setScale] = useState(1);
+  const [scale, setScale] = useState(1.5); // Start slightly zoomed in
   const [isDragging, setIsDragging] = useState(false);
   const [lastPos, setLastPos] = useState({ x: 0, y: 0 });
   const [dragStartPos, setDragStartPos] = useState({ x: 0, y: 0 });
 
-  const TILE_SIZE = 10;
+  const TILE_SIZE = 12; // Slightly larger base tile
 
   // Zoom to selected agent when selection changes
   useEffect(() => {
@@ -16,177 +16,258 @@ const MapCanvas = ({ gameState, selectedAgentId, onSelectAgent }) => {
       const agent = gameState.agents.find(a => a.id === selectedAgentId);
       if (agent && canvasRef.current) {
         const canvas = canvasRef.current;
-        const newScale = 3.0; // Zoom in
-        const newOffsetX = canvas.width / 2 - (agent.x * TILE_SIZE + TILE_SIZE / 2) * newScale;
-        const newOffsetY = canvas.height / 2 - (agent.y * TILE_SIZE + TILE_SIZE / 2) * newScale;
-        setScale(newScale);
-        setOffset({ x: newOffsetX, y: newOffsetY });
+        // Smoothly target the agent
+        const targetScale = 3.5;
+        const targetX = canvas.width / 2 - (agent.x * TILE_SIZE + TILE_SIZE / 2) * targetScale;
+        const targetY = canvas.height / 2 - (agent.y * TILE_SIZE + TILE_SIZE / 2) * targetScale;
+
+        setScale(targetScale);
+        setOffset({ x: targetX, y: targetY });
       }
     }
-  }, [selectedAgentId]); // Only run when selection changes
+  }, [selectedAgentId]);
 
-  // Terrain Colors
-  const TERRAIN_COLORS = {
-    0: '#3b82f6', // Water
-    1: '#fde047', // Sand
-    2: '#22c55e', // Grass
-    3: '#15803d', // Forest
-    4: '#78716c', // Mountain
-    5: '#f8fafc', // Snow
+  // Terrain & Map Colors
+  const COLORS = {
+    WATER: '#1e3a8a', // Deep Blue
+    SAND: '#d4b483', // Muted Gold/Sand
+    GRASS: '#3f6212', // Deep Olive Green (CK3 style)
+    FOREST: '#14532d', // Dark Pine
+    MOUNTAIN: '#57534e', // Stone Grey
+    SNOW: '#e2e8f0', // Dull White
+    GRID: 'rgba(0, 0, 0, 0.15)', // Subtle grid
+    BG: '#0f172a', // Canvas bg
   };
 
   useEffect(() => {
     const canvas = canvasRef.current;
-    const ctx = canvas.getContext('2d');
+    if (!canvas) return;
+    const ctx = canvas.getContext('2d', { alpha: false }); // Optimize
 
-    // Clear canvas
-    ctx.fillStyle = '#111';
-    ctx.fillRect(0, 0, canvas.width, canvas.height);
+    // Resizing canvas to match display size for sharpness
+    const dpr = window.devicePixelRatio || 1;
+    const rect = canvas.getBoundingClientRect();
+    canvas.width = rect.width * dpr;
+    canvas.height = rect.height * dpr;
+    ctx.scale(dpr, dpr);
+
+    // Initial Fill
+    ctx.fillStyle = COLORS.BG;
+    ctx.fillRect(0, 0, rect.width, rect.height);
 
     if (!gameState) return;
 
     ctx.save();
-    // Apply transformations
+    // Apply View Transform
     ctx.translate(offset.x, offset.y);
     ctx.scale(scale, scale);
 
-    // 1. Draw Terrain
+    // --- DRAWING LAYERS ---
+
+    // 1. TERRAIN
     if (gameState.terrain) {
       gameState.terrain.forEach((row, y) => {
         row.forEach((tileType, x) => {
-          ctx.fillStyle = TERRAIN_COLORS[tileType] || '#000';
+          let color = '#000';
+          switch (tileType) {
+            case 0: color = COLORS.WATER; break;
+            case 1: color = COLORS.SAND; break;
+            case 2: color = COLORS.GRASS; break;
+            case 3: color = COLORS.FOREST; break;
+            case 4: color = COLORS.MOUNTAIN; break;
+            case 5: color = COLORS.SNOW; break;
+            default: color = '#000';
+          }
+
+          // Map Mode Overrides
+          if (mapMode === 'POLITICAL') {
+            // If we had territory data, we'd color here. For now, keep terrain.
+            // Or maybe desaturate terrain to make agents pop?
+            // keeping terrain for now as base.
+          }
+
+          ctx.fillStyle = color;
           ctx.fillRect(x * TILE_SIZE, y * TILE_SIZE, TILE_SIZE, TILE_SIZE);
 
-          // Draw Trees on Forest
+          // Grid Lines (Only visible at high zoom)
+          if (scale > 2) {
+            ctx.strokeStyle = COLORS.GRID;
+            ctx.lineWidth = 0.5 / scale; // Keep line thin
+            ctx.strokeRect(x * TILE_SIZE, y * TILE_SIZE, TILE_SIZE, TILE_SIZE);
+          }
+
+          // Decor: Trees for forest
           if (tileType === 3) {
-            ctx.fillStyle = '#052e16';
+            ctx.fillStyle = 'rgba(0,0,0,0.2)';
             ctx.beginPath();
-            ctx.arc(x * TILE_SIZE + TILE_SIZE / 2, y * TILE_SIZE + TILE_SIZE / 2, TILE_SIZE / 4, 0, Math.PI * 2);
+            ctx.arc((x + 0.5) * TILE_SIZE, (y + 0.5) * TILE_SIZE, TILE_SIZE * 0.3, 0, Math.PI * 2);
             ctx.fill();
           }
         });
       });
     }
 
-    // 2. Draw Items
+    // 2. ITEMS
     if (gameState.items) {
       gameState.items.forEach(item => {
-        if (item.tags && item.tags.includes('red')) {
-          ctx.fillStyle = '#ef4444'; // Red Fruit
-        } else {
-          ctx.fillStyle = '#a8a29e'; // Stone/Item color
-        }
+        ctx.fillStyle = (item.tags && item.tags.includes('red')) ? '#ef4444' : '#9ca3af';
         ctx.beginPath();
-        ctx.arc(item.x * TILE_SIZE + TILE_SIZE / 2, item.y * TILE_SIZE + TILE_SIZE / 2, TILE_SIZE / 4, 0, 2 * Math.PI);
+        ctx.arc((item.x + 0.5) * TILE_SIZE, (item.y + 0.5) * TILE_SIZE, TILE_SIZE * 0.25, 0, Math.PI * 2);
         ctx.fill();
+        ctx.lineWidth = 1 / scale;
+        ctx.strokeStyle = 'rgba(0,0,0,0.5)';
+        ctx.stroke();
       });
     }
 
-    // 3. Draw Animals
-    if (gameState.animals) {
-      gameState.animals.forEach(animal => {
-        ctx.fillStyle = animal.type === 'carnivore' ? '#000000' : '#fbbf24'; // Black or Yellow
-        ctx.beginPath();
-        ctx.arc(animal.x * TILE_SIZE + TILE_SIZE / 2, animal.y * TILE_SIZE + TILE_SIZE / 2, TILE_SIZE / 2 - 1, 0, 2 * Math.PI);
-        ctx.fill();
-      });
-    }
-
-    // 3.5. Draw Opinions (Social Network Overlay)
-    if (gameState.agents) {
-      // Map ID to agent for lines
-      const agentMap = new Map();
-      gameState.agents.forEach(a => agentMap.set(a.id, a));
-
-      gameState.agents.forEach(agent => {
-        if (!agent.opinions) return;
-
-        Object.entries(agent.opinions).forEach(([targetId, score]) => {
-          if (Math.abs(score) < 0.001) return; // Show almost all connections
-
-          const target = agentMap.get(targetId);
-          if (target) {
-            ctx.beginPath();
-            ctx.moveTo(agent.x * TILE_SIZE + TILE_SIZE / 2, agent.y * TILE_SIZE + TILE_SIZE / 2);
-            ctx.lineTo(target.x * TILE_SIZE + TILE_SIZE / 2, target.y * TILE_SIZE + TILE_SIZE / 2);
-
-            // Color: Green (Like) / Red (Dislike)
-            ctx.strokeStyle = score > 0
-              ? `rgba(74, 222, 128, ${Math.min(Math.abs(score), 0.8)})`
-              : `rgba(239, 68, 68, ${Math.min(Math.abs(score), 0.8)})`;
-
-            ctx.lineWidth = Math.max(0.5, Math.abs(score) * 1.5);
-            ctx.stroke();
-          }
-        });
-
-        // Visualize Interactions (Hearts/Swords)
-        if (agent.state && agent.state.last_interaction) {
-          const li = agent.state.last_interaction;
-          // Only show recent interaction (e.g. within last 10 ticks) - Backend needs to clear it or we just show it? 
-          // The timestamp check is needed if we want it to fade. For now showing static.
-          const partner = agentMap.get(li.partner);
-          if (partner && (li.type === 'love' || li.type === 'combat' || li.type === 'reproduce')) {
-            const mx = (agent.x + partner.x) / 2 * TILE_SIZE + TILE_SIZE / 2;
-            const my = (agent.y + partner.y) / 2 * TILE_SIZE + TILE_SIZE / 2;
-
-            ctx.font = '10px Arial';
-            ctx.textAlign = 'center';
-            ctx.textBaseline = 'middle';
-
-            if (li.type === 'love') ctx.fillText('♥', mx, my);
-            else if (li.type === 'reproduce') ctx.fillText('★', mx, my);
-            else if (li.type === 'combat') ctx.fillText('⚔️', mx, my);
-          }
-        }
-      });
-    }
-
-    // 4. Draw Agents
+    // 3. AGENTS
     if (gameState.agents) {
       gameState.agents.forEach(agent => {
-        ctx.fillStyle = agent.attributes.gender === 'male' ? '#3b82f6' : '#ec4899'; // Blue or Pink
+        const cx = (agent.x + 0.5) * TILE_SIZE;
+        const cy = (agent.y + 0.5) * TILE_SIZE;
+        const radius = TILE_SIZE * 0.4;
+
+        // Base Color
+        let color = agent.attributes.gender === 'male' ? '#3b82f6' : '#ec4899';
+
+        // Tribe Color Override (if political mode)
+        // Ensure accurate coloring based on tribe if available
+        if (mapMode === 'POLITICAL' && agent.attributes.tribe_color) {
+          color = agent.attributes.tribe_color;
+        }
+
         ctx.beginPath();
-        ctx.arc(agent.x * TILE_SIZE + TILE_SIZE / 2, agent.y * TILE_SIZE + TILE_SIZE / 2, TILE_SIZE / 2 - 1, 0, 2 * Math.PI);
+        ctx.arc(cx, cy, radius, 0, Math.PI * 2);
+        ctx.fillStyle = color;
         ctx.fill();
 
-        // Selection Highlight
+        // Stroke (Gold for Leader, White for selected, Black for normal)
+        ctx.lineWidth = 2 / scale;
         if (selectedAgentId === agent.id) {
-          ctx.strokeStyle = '#fff';
-          ctx.lineWidth = 2;
-          ctx.stroke();
+          ctx.strokeStyle = '#ffffff';
+          ctx.lineWidth = 4 / scale;
+        } else if (agent.attributes.leader_id === agent.id) {
+          ctx.strokeStyle = '#fbbf24'; // Gold
+        } else {
+          ctx.strokeStyle = 'rgba(0,0,0,0.6)';
         }
+        ctx.stroke();
 
-        // Agent Name (only if zoomed in enough)
-        if (scale > 0.5) {
-          ctx.fillStyle = '#fff';
-          ctx.font = '3px Arial';
+        // Direction Indicator (if they have 'facing' or just simple dot)
+        // Just a simple eye dot for now
+        ctx.fillStyle = 'white';
+        ctx.beginPath();
+        ctx.arc(cx, cy - radius * 0.3, radius * 0.2, 0, Math.PI * 2);
+        ctx.fill();
+
+        // Name Tag (Zoom dependent)
+        if (scale > 2.5) {
+          ctx.fillStyle = 'white';
+          ctx.font = `bold ${Math.max(10, 4 / scale)}px sans-serif`; // Fixed size slightly
           ctx.textAlign = 'center';
-          ctx.fillText(agent.attributes.name, agent.x * TILE_SIZE + TILE_SIZE / 2, agent.y * TILE_SIZE - 2);
+          ctx.textBaseline = 'bottom';
+          ctx.shadowColor = 'black';
+          ctx.shadowBlur = 4;
+          ctx.lineWidth = 3;
+          // ctx.strokeText(agent.attributes.name, cx, cy - radius - 2); // heavy
+          ctx.fillText(agent.attributes.name, cx, cy - radius * 1.5);
+          ctx.shadowBlur = 0;
         }
       });
     }
 
-    // 5. Day/Night Cycle Overlay
-    if (gameState.is_day === false) { // Night
-      ctx.fillStyle = 'rgba(0, 0, 20, 0.5)'; // Dark Blue Overlay
-      ctx.fillRect(0, 0, 800 * 5, 600 * 5); // Cover everything (huge rect)
+    // 4. ANIMALS
+    if (gameState.animals) {
+      gameState.animals.forEach(anim => {
+        const cx = (anim.x + 0.5) * TILE_SIZE;
+        const cy = (anim.y + 0.5) * TILE_SIZE;
+        ctx.fillStyle = anim.type === 'carnivore' ? '#7f1d1d' : '#854d0e'; // Dark Red / Brown
+        ctx.beginPath();
+        ctx.moveTo(cx, cy - TILE_SIZE * 0.4);
+        ctx.lineTo(cx + TILE_SIZE * 0.3, cy + TILE_SIZE * 0.3);
+        ctx.lineTo(cx - TILE_SIZE * 0.3, cy + TILE_SIZE * 0.3);
+        ctx.fill();
+      });
+    }
+
+    // 5. CONNECTIONS (Selected Agent)
+    const selectedAgent = gameState.agents.find(a => a.id === selectedAgentId);
+    if (selectedAgent && selectedAgent.qalb && selectedAgent.qalb.opinions) {
+      const agentMap = new Map(gameState.agents.map(a => [a.id, a]));
+      const sx = (selectedAgent.x + 0.5) * TILE_SIZE;
+      const sy = (selectedAgent.y + 0.5) * TILE_SIZE;
+
+      Object.entries(selectedAgent.qalb.opinions).forEach(([tid, val]) => {
+        const target = agentMap.get(tid);
+        if (target && Math.abs(val) > 5) { // Only strong opinions
+          ctx.beginPath();
+          ctx.moveTo(sx, sy);
+          ctx.lineTo((target.x + 0.5) * TILE_SIZE, (target.y + 0.5) * TILE_SIZE);
+          ctx.strokeStyle = val > 0 ? `rgba(34, 197, 94, ${Math.min(1, val / 50)})` : `rgba(239, 68, 68, ${Math.min(1, Math.abs(val) / 50)})`;
+          ctx.lineWidth = 2 / scale;
+          ctx.setLineDash([5 / scale, 5 / scale]);
+          ctx.stroke();
+          ctx.setLineDash([]);
+        }
+      });
+    }
+
+    // 6. NIGHT OVERLAY
+    if (!gameState.is_day) {
+      ctx.fillStyle = 'rgba(15, 23, 42, 0.4)'; // Slate 900, 40%
+      // ctx.fillRect(-1000, -1000, 10000, 10000); // Hacky cover
+      // Better:
+      // Reset transform to draw fullscreen overlay?
+      // Actually, just drawing it over the probable map area is enough
+      // but to be safe let's pop logic
     }
 
     ctx.restore();
-  }, [gameState, offset, scale, selectedAgentId]);
+
+    // UI Overlay on Canvas (Screen Space)
+    if (!gameState.is_day) {
+      ctx.fillStyle = 'rgba(15, 23, 42, 0.6)';
+      ctx.fillRect(0, 0, canvas.width, canvas.height);
+
+      ctx.font = 'bold 24px serif';
+      ctx.fillStyle = '#94a3b8';
+      ctx.textAlign = 'right';
+      ctx.fillText("NIGHT", canvas.width - 20, 40);
+    }
+
+
+  }, [gameState, offset, scale, selectedAgentId, mapMode]);
+
+  // --- CONTROLS ---
 
   const handleWheel = (e) => {
     e.preventDefault();
     const zoomSensitivity = 0.001;
-    const newScale = Math.min(Math.max(0.1, scale - e.deltaY * zoomSensitivity), 5);
+    const delta = -e.deltaY; // deltaY is positive for scrolling down (zoom out)
+    const newScale = Math.min(Math.max(0.5, scale + delta * zoomSensitivity * scale), 10);
+
+    // Zoom towards mouse pointer
+    const rect = canvasRef.current.getBoundingClientRect();
+    const mouseX = e.clientX - rect.left;
+    const mouseY = e.clientY - rect.top;
+
+    // derived from: (world - offset) / oldScale = (world - newOffset) / newScale
+    const worldX = (mouseX - offset.x) / scale;
+    const worldY = (mouseY - offset.y) / scale;
+
+    const newOffsetX = mouseX - worldX * newScale;
+    const newOffsetY = mouseY - worldY * newScale;
+
     setScale(newScale);
+    setOffset({ x: newOffsetX, y: newOffsetY });
   };
 
   const handleMouseDown = (e) => {
-    setIsDragging(true);
-    setLastPos({ x: e.clientX, y: e.clientY });
-    setDragStartPos({ x: e.clientX, y: e.clientY });
+    if (e.button === 0 || e.button === 1) { // Left or Middle click
+      setIsDragging(true);
+      setLastPos({ x: e.clientX, y: e.clientY });
+      setDragStartPos({ x: e.clientX, y: e.clientY });
+    }
   };
 
   const handleMouseMove = (e) => {
@@ -200,31 +281,24 @@ const MapCanvas = ({ gameState, selectedAgentId, onSelectAgent }) => {
 
   const handleMouseUp = (e) => {
     setIsDragging(false);
-
-    // Check if it was a click (minimal movement)
     const dist = Math.sqrt(Math.pow(e.clientX - dragStartPos.x, 2) + Math.pow(e.clientY - dragStartPos.y, 2));
-
-    if (dist < 5) {
-      handleCanvasClick(e);
-    }
+    if (dist < 5) handleCanvasClick(e);
   };
 
   const handleCanvasClick = (e) => {
     if (!gameState || !gameState.agents) return;
-
     const rect = canvasRef.current.getBoundingClientRect();
     const mouseX = e.clientX - rect.left;
     const mouseY = e.clientY - rect.top;
 
-    // Convert screen coords to world coords
     const worldX = (mouseX - offset.x) / scale / TILE_SIZE;
     const worldY = (mouseY - offset.y) / scale / TILE_SIZE;
 
-    // Find clicked agent
+    // Find clicked
     const clickedAgent = gameState.agents.find(agent => {
-      const dx = agent.x - worldX;
-      const dy = agent.y - worldY;
-      return Math.sqrt(dx * dx + dy * dy) < 1.5; // Click radius tolerance
+      const dx = agent.x + 0.5 - worldX; // Center offset correction
+      const dy = agent.y + 0.5 - worldY;
+      return Math.sqrt(dx * dx + dy * dy) < 0.8;
     });
 
     if (clickedAgent) {
@@ -235,18 +309,24 @@ const MapCanvas = ({ gameState, selectedAgentId, onSelectAgent }) => {
   };
 
   return (
-    <canvas
-      ref={canvasRef}
-      width={800}
-      height={600}
-      className="w-full h-full block"
-      style={{ cursor: isDragging ? 'grabbing' : 'grab' }}
-      onWheel={handleWheel}
-      onMouseDown={handleMouseDown}
-      onMouseMove={handleMouseMove}
-      onMouseUp={handleMouseUp}
-      onMouseLeave={() => setIsDragging(false)}
-    />
+    <div className="w-full h-full bg-slate-900 border-4 border-yellow-900/30 overflow-hidden relative shadow-inner">
+      <canvas
+        ref={canvasRef}
+        className="w-full h-full block touch-none"
+        style={{ width: '100%', height: '100%', cursor: isDragging ? 'grabbing' : 'grab' }}
+        onWheel={handleWheel}
+        onMouseDown={handleMouseDown}
+        onMouseMove={handleMouseMove}
+        onMouseUp={handleMouseUp}
+        onMouseLeave={() => setIsDragging(false)}
+        onContextMenu={(e) => e.preventDefault()}
+      />
+      {/* Mini Controls overlay */}
+      <div className="absolute bottom-4 right-4 flex gap-2">
+        <button onClick={() => setScale(s => s * 1.2)} className="w-8 h-8 bg-zinc-800 text-yellow-500 border border-yellow-700 rounded hover:bg-zinc-700 font-bold">+</button>
+        <button onClick={() => setScale(s => s / 1.2)} className="w-8 h-8 bg-zinc-800 text-yellow-500 border border-yellow-700 rounded hover:bg-zinc-700 font-bold">-</button>
+      </div>
+    </div>
   );
 };
 

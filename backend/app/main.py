@@ -92,6 +92,28 @@ class NumpyEncoder(json.JSONEncoder):
             return bool(obj)
         return super(NumpyEncoder, self).default(obj)
 
+def sanitize_for_json(obj):
+    """
+    Recursively replace NaN and Infinity with None to ensure valid JSON.
+    """
+    if isinstance(obj, float):
+        if np.isnan(obj) or np.isinf(obj):
+            return None
+        return obj
+    elif isinstance(obj, dict):
+        return {k: sanitize_for_json(v) for k, v in obj.items()}
+    elif isinstance(obj, list):
+        return [sanitize_for_json(v) for v in obj]
+    elif isinstance(obj, np.floating):
+         if np.isnan(obj) or np.isinf(obj):
+            return None
+         return float(obj)
+    elif isinstance(obj, np.integer): # Handle numpy ints here too for safety
+        return int(obj)
+    elif isinstance(obj, np.ndarray):
+        return sanitize_for_json(obj.tolist())
+    return obj
+
 @app.websocket("/ws")
 async def websocket_endpoint(websocket: WebSocket):
     await websocket.accept()
@@ -155,7 +177,12 @@ async def websocket_endpoint(websocket: WebSocket):
             try:
                 state = world.get_state()
                 state["paused"] = paused
-                # print(f"WS: Sending state for step {state['time_step']}")
+                
+                # OPTIMIZATION: Only sanitize dynamic entities where NaNs occur.
+                # Sanitizing the entire terrain (200x200) is too slow and unnecessary (ints).
+                state["agents"] = sanitize_for_json(state["agents"])
+                state["animals"] = sanitize_for_json(state["animals"])
+                
                 await websocket.send_text(json.dumps(state, cls=NumpyEncoder))
             except RuntimeError as e:
                 # Catch "Cannot call 'send' once a close message has been sent"
@@ -164,8 +191,12 @@ async def websocket_endpoint(websocket: WebSocket):
                     break
                 else:
                     print(f"WS: RuntimeError sending state: {e}")
+                    import traceback
+                    traceback.print_exc()
             except Exception as e:
                 print(f"WS: Error sending state: {e}")
+                import traceback
+                traceback.print_exc()
                 # Retry or break?
                 await asyncio.sleep(1)
             

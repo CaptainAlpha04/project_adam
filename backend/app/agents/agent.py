@@ -1855,26 +1855,59 @@ class Agent:
     def add_memory(self, desc: str, type="event", impact=0.0):
         self.ruh.soul.memories.append(Memory(type=type, description=desc, location=(self.x, self.y), time=self.state.age_steps, emotional_impact=impact))
 
+    def calculate_job_title(self) -> str:
+        """
+        Derives a 'Job' or 'Class' based on Personality and Stats.
+        """
+        if self.attributes.is_prophet: return "Prophet"
+        if self.attributes.leader_id == self.id: 
+            return "Chieftain" if self.attributes.tribe_id else "Warlord"
+        
+        # Skill/Stat based
+        p = self.attributes.personality_vector
+        
+        if p.get("Aggression", 0) > 0.8: return "Warrior"
+        if p.get("Spirituality", 0) > 0.8: return "Shaman"
+        if p.get("Curiosity", 0) > 0.8: return "Explorer"
+        if p.get("Conscientiousness", 0) > 0.8: return "Builder"
+        if p.get("Social", 0) > 0.8: return "Diplomat"
+        
+        return "Gatherer"
+
     def to_dict(self, world=None):
         """
         Serializer for Frontend/API.
-        Adapts the new structure to a flat JSON compatible with existing props where possible,
-        but exposes the new structure too.
         """
+        # Resolve Names for UI
+        def resolve_name(aid): 
+            if not aid: return None
+            if world:
+                a = world.agents.get(aid)
+                return a.attributes.name if a else "Unknown"
+            return aid
+            
         return {
             "id": self.id,
             "x": int(self.x),
             "y": int(self.y),
-            "attributes": self.attributes.__dict__,
+            "attributes": {
+                **self.attributes.__dict__,
+                "job": self.calculate_job_title(),
+                "tribe_color": world.tribes[self.attributes.tribe_id].color if world and self.attributes.tribe_id and self.attributes.tribe_id in world.tribes else None,
+                "partner_name": resolve_name(self.attributes.partner_id),
+                "leader_name": resolve_name(self.attributes.leader_id),
+                "parent_names": [resolve_name(pid) for pid in self.attributes.parents],
+                "child_names": [resolve_name(cid) for cid in self.attributes.children]
+            },
             "state": self.state.__dict__,
-            "needs": { # Flattened view for frontend compatibility
+            "needs": { 
                 "hunger": self.nafs.hunger,
                 "energy": self.nafs.energy,
                 "social": self.qalb.social,
                 "fun": self.qalb.fun
             },
             "nafs": {k:v for k,v in self.nafs.__dict__.items() if k != 'agent'},
-            "qalb": {k:v for k,v in self.qalb.__dict__.items() if k != 'agent' and k != 'brain'}, # Exclude brain object too (PPO model not serializable)
+            "qalb": {k:v for k,v in self.qalb.__dict__.items() if k != 'agent' and k != 'brain'}, 
             "ruh": {
                 "life_goal": self.ruh.life_goal,
                 "wisdom": self.ruh.wisdom,
@@ -1886,7 +1919,6 @@ class Agent:
             "inventory": self.inventory,
             "diary": self.diary,
             "visible_agents": self.visible_agents,
-            # Tribe Info
             "tribe_id": self.attributes.tribe_id,
             "tribe_name": world.tribes[self.attributes.tribe_id].name if world and self.attributes.tribe_id and self.attributes.tribe_id in world.tribes else "Nomad",
             "tribe_goal": world.tribes[self.attributes.tribe_id].goal if world and self.attributes.tribe_id and self.attributes.tribe_id in world.tribes else "wander",
