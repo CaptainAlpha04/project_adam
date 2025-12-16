@@ -19,7 +19,17 @@ const TopBar = React.memo(({ gameState, onTogglePause }) => {
                 <ResourceItem label="Population" value={gameState.agents.length} icon="👥" color="text-blue-400" />
                 <ResourceItem label="Generations" value={gameState.generation} icon="🧬" color="text-purple-400" />
                 <ResourceItem label="Prophets" value={gameState.agents.filter(a => a.attributes.is_prophet).length} icon="🔮" color="text-pink-400" />
-                <ResourceItem label="Harmony" value="56%" icon="⚖️" color="text-green-400" />
+                {/* Global Harmony Calculation */}
+                {(() => {
+                    let total = 0, count = 0;
+                    gameState.agents.forEach(a => {
+                        if (a.qalb && a.qalb.opinions) {
+                            Object.values(a.qalb.opinions).forEach(v => { total += v; count++; });
+                        }
+                    });
+                    const harmony = count > 0 ? ((total / count) + 100) / 2 : 50;
+                    return <ResourceItem label="Harmony" value={`${harmony.toFixed(0)}%`} icon="⚖️" color={harmony < 50 ? "text-red-400" : "text-green-400"} />;
+                })()}
             </div>
 
             {/* Controls */}
@@ -56,7 +66,7 @@ const ResourceItem = ({ label, value, icon, color }) => (
 );
 
 const MapModeSelector = React.memo(({ mapMode, setMapMode }) => (
-    <div className="pointer-events-auto absolute bottom-6 right-6 flex flex-col gap-2 bg-stone-900/90 p-2 rounded border border-yellow-900/50 shadow-lg backdrop-blur z-50">
+    <div className="pointer-events-auto absolute bottom-15 right-6 flex flex-col gap-2 bg-stone-900/90 p-2 rounded border border-yellow-900/50 shadow-lg backdrop-blur z-50">
         <span className="text-[10px] uppercase text-stone-500 font-bold text-center mb-1">Map Mode</span>
         {['TERRAIN', 'POLITICAL', 'RELIGIOUS'].map(mode => (
             <button
@@ -111,7 +121,8 @@ const CharacterSheet = React.memo(({ agent, gameState, onSelectAgent, agentMap }
         const opinions = Object.entries(agent.qalb.opinions);
         const friends = opinions.filter(([, v]) => v > 15).length;
         const enemies = opinions.filter(([, v]) => v < -15).length;
-        const followers = agent.attributes.followers ? agent.attributes.followers.length : 0;
+        // Robust check for followers
+        const followers = (agent.attributes.followers || []).length;
         return { friends, enemies, followers };
     }, [agent]);
 
@@ -285,7 +296,10 @@ const CharacterSheet = React.memo(({ agent, gameState, onSelectAgent, agentMap }
                                                     <span className="text-xs font-bold text-stone-300 group-hover:text-yellow-200 transition-colors">{target.attributes.name}</span>
                                                     {/* Relationship Tag */}
                                                     <span className="text-[9px] text-stone-500 uppercase">
-                                                        {score > 50 ? "Lover" : score > 20 ? "Friend" : score < -20 ? "Rival" : "Acquaintance"}
+                                                        {score > 50
+                                                            ? (agent.attributes.gender === target.attributes.gender ? "Best Friend" : "Lover")
+                                                            : score > 20 ? "Friend"
+                                                                : score < -20 ? "Rival" : "Acquaintance"}
                                                     </span>
                                                 </div>
                                                 <div className={`font-mono font-bold text-sm ${score > 0 ? "text-green-500" : "text-red-500"}`}>

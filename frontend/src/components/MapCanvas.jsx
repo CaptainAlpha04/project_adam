@@ -73,7 +73,7 @@ const MapCanvas = ({ gameState, selectedAgentId, onSelectAgent, mapMode = 'TERRA
             case 0: color = COLORS.WATER; break;
             case 1: color = COLORS.SAND; break;
             case 2: color = COLORS.GRASS; break;
-            case 3: color = COLORS.FOREST; break;
+            case 3: color = '#14532d'; break; // Dark Green Block for Trees
             case 4: color = COLORS.MOUNTAIN; break;
             case 5: color = COLORS.SNOW; break;
             default: color = '#000';
@@ -100,11 +100,16 @@ const MapCanvas = ({ gameState, selectedAgentId, onSelectAgent, mapMode = 'TERRA
         let color = '#d4d4d4'; // Default grey
         let shape = 'circle';
 
-        if (item.tags) {
-          if (item.tags.includes('food')) { color = '#ef4444'; shape = 'circle'; } // Red Food
-          else if (item.tags.includes('wood')) { color = '#78350f'; shape = 'rect'; } // Brown Wood
-          else if (item.tags.includes('stone')) { color = '#57534e'; shape = 'rect'; } // Grey Stone
-          else if (item.tags.includes('tool')) { color = '#eab308'; shape = 'triangle'; } // Gold Tool
+        if (item) {
+          const t = item.tags || [];
+          const n = (item.name || "").toLowerCase();
+          const id = (item.id || "").toLowerCase();
+
+          // Check ID first as user requested, then Name, then Tags
+          if (id.includes('fruit') || n.includes('fruit') || t.includes('food')) { color = '#ef4444'; shape = 'circle'; } // Red Food
+          else if (id.includes('wood') || n.includes('wood') || t.includes('wood')) { color = '#ae6033ff'; shape = 'circle'; } // Brown Wood
+          else if (id.includes('stone') || n.includes('stone') || t.includes('stone')) { color = '#57534e'; shape = 'rect'; } // Grey Stone
+          else if (t.includes('tool') || t.includes('weapon')) { color = '#eab308'; shape = 'triangle'; } // Gold Tool
         }
 
         ctx.fillStyle = color;
@@ -190,8 +195,8 @@ const MapCanvas = ({ gameState, selectedAgentId, onSelectAgent, mapMode = 'TERRA
         const cy = (anim.y + 0.5) * TILE_SIZE;
 
         let color = '#a8a29e'; // Default Grey
-        if (anim.type === 'carnivore') color = '#dc2626'; // Red Wolf
-        else if (anim.type === 'herbivore') color = '#fb923c'; // Orange Deer
+        if (anim.type === 'carnivore') color = '#000000'; // Black Triangle for Predators
+        else if (anim.type === 'herbivore') color = '#f97316'; // Orange Triangle for Herbivores
 
         ctx.fillStyle = color;
         ctx.beginPath();
