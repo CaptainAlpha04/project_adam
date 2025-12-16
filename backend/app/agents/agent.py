@@ -102,7 +102,9 @@ class AgentAttributes:
     # Derived shortcuts
     curiosity: float = 0.5 
     honesty: float = 0.5
+    honesty: float = 0.5
     aggression: float = 0.1
+    is_prophet: bool = False
 
 @dataclass
 class AgentState:
@@ -216,11 +218,12 @@ class Qalb:
         """
         # DEBUG LOG
         # print(f"Agent {self.agent.id[:4]} Proposing Action...")
-        # 0. SOCIAL LOCK (Chat Loop)
-        if self.agent.state.social_lock_target and self.agent.state.social_lock_steps > 0:
-             self.agent.log_diary("DEBUG: Stuck in Social Lock")
-             return {'action': 'continue_social', 'target': self.agent.state.social_lock_target, 'desc': "Deep in conversation."}
-
+        # 0. SOCIAL LOCK - REMOVED (Handled in Multitasking Act Loop)
+        # But we should suppress "Socialize" desire if already locked to prevent switching targets?
+        # Or keep it to maintain lock? 
+        # Actually, if we are multitasking, we don't need to "propose" continue_social as the MAIN action.
+        # We want to propose "Work" or "Gather" while social runs in background.
+        
         # 0. BRAIN OVERRIDE (The Intuition)
         # if self.brain:
             # self.agent.log_diary("DEBUG: Brain Override")
@@ -247,7 +250,8 @@ class Qalb:
         # Logic: Hunger * (1 + 0.5 * Survival_Instinct)
         # Plan Ahead: If Conscientious, add weight to future hunger prediction
         predicted_hunger = self.agent.nafs.hunger + (0.1 if p.get("Conscientiousness", 0.5) > 0.6 else 0.0)
-        desires["Eat"] = min(1.0, predicted_hunger * (1.2 + p["Survival"]))
+        # Amplified Hunger to ensure they eat before starving
+        desires["Eat"] = min(1.0, predicted_hunger * (2.0 + p["Survival"]))
 
         # 2. Desire for Connection (Social + Extroversion + Boredom)
         # "I feel lonely OR bored."
@@ -260,7 +264,10 @@ class Qalb:
         if extroversion > 0.7:
              desire_social = (loneliness ** 0.5) + (boredom * 0.5)
         else:
-             desire_social = (loneliness ** 2.0) + (boredom * 0.2)
+             desire_social = (loneliness ** 1.5) + (boredom * 0.3) # Increased from 2.0/0.2 to be more active
+        
+        # Amplification: If really lonely, it should be painful
+        if loneliness > 0.8: desire_social += 0.2
         
         # OPPORTUNITY BONUS
         # If I see someone close, it's "Cheap" to socialize.
@@ -275,6 +282,11 @@ class Qalb:
              # Work dampening applied after work calculation
         
         desires["Socialize"] = min(1.0, desire_social)
+        
+        # MULTITASKING: If already locked, suppress desire to socialize so we can do other things (Work/Eat)
+        # The social loop runs in the background (Agent.act -> process_social_loop)
+        if self.agent.state.social_lock_target and self.agent.state.social_lock_steps > 0:
+            desires["Socialize"] = 0.0
         
         # 3. Desire for Lust (The Bridge)
         # Driven by Nafs.lust + Libido (Lust trait)
@@ -329,8 +341,10 @@ class Qalb:
             desires["Work"] = 0.0
             
         # DISTRACTION: If social opportunity is high, work less
-        if nearest_agent_dist < 5.0:
-            desires["Work"] *= 0.2
+        # DISTRACTION: If social opportunity is high, work less
+        # MULTITASKING FIX: We want them to work even if friends are near.
+        # if nearest_agent_dist < 5.0:
+        #     desires["Work"] *= 0.2
 
         # --- ARBITRATION ---
         
@@ -342,10 +356,11 @@ class Qalb:
             self.agent.log_diary(f"DEBUG: Desire {dominant_desire} ({intensity:.2f})")
             pass
 
-        # REPRODUCTION (Opportunistic Override)
-        if self.agent.state.happiness > 0.6 and self.agent.attributes.partner_id:
-             if self.agent.nafs.energy > 0.4:
-                 return {'action': 'reproduce', 'desc': "Expanding the bloodline."}
+        # REPRODUCTION (Opportunistic Override) - DISABLED
+        # User wants reproduction only on specific milestones (multiples of 60 opinion)
+        # if self.agent.state.happiness > 0.6 and self.agent.attributes.partner_id:
+        #      if self.agent.nafs.energy > 0.4:
+        #          return {'action': 'reproduce', 'desc': "Expanding the bloodline."}
 
         # ACTION MAPPING
         if dominant_desire == "Eat":
@@ -395,7 +410,7 @@ class Ruh:
     def determine_life_goal(self):
         p = self.agent.attributes.personality_vector
         if p["Greed"] > 0.7: self.life_goal = "Wealth"
-        elif p["Altruism"] > 0.7: self.life_goal = "Prophet"
+        elif p["Altruism"] > 0.7: self.life_goal = "Community" # Disabled "Prophet"
         elif p["Curiosity"] > 0.7: self.life_goal = "Sage"
         elif p["Aggression"] > 0.7: self.life_goal = "Warlord"
         else: self.life_goal = "Community"
@@ -429,7 +444,9 @@ class Agent:
         self.birth_time = birth_time
         
         # Identity
-        if gender is None: gender = np.random.choice(['male', 'female'])
+        if gender is None: 
+            # Force 50/50 distribution roughly using random choice
+            gender = np.random.choice(['male', 'female'], p=[0.5, 0.5])
         if name is None: name = np.random.choice(NAMES_MALE if gender == 'male' else NAMES_FEMALE)
         
         # Personality
@@ -488,6 +505,10 @@ class Agent:
         """
         The Main Execution Cycle.
         """
+        # 0. Cooldown Check (Busy)
+        if self.state.busy_until > world.time_step:
+            return
+
         self.state.age_steps += 1
         
         # 1. Update Internal Systems
@@ -497,13 +518,20 @@ class Agent:
         # 1.5 Perception (Vision)
         self.scan_surroundings(world)
 
-        # 2. Check Busy State
-        if world.time_step < self.state.busy_until:
-             # print(f"Agent {self.attributes.name} is busy until {self.state.busy_until} (Current: {world.time_step})")
-             self.log_diary(f"DEBUG: Busy until {self.state.busy_until}")
-             return # Busy doing something (sleeping, chatting)
-        
-        # print(f"Agent {self.attributes.name} acting at {world.time_step}")
+        # 2. MULTITASKING KERNEL
+        # If socially locked, run the conversation loop IN PARALLEL
+        if self.state.social_lock_target and self.state.social_lock_steps > 0:
+             # Check distance to target
+             target = world.agents.get(self.state.social_lock_target)
+             if target and self.distance_to(target) < 4.0:
+                 # We can talk while working
+                 self.process_social_loop(world)
+                 # Do NOT return. Continue to physical action.
+             else:
+                 # Too far, break loop
+                 self.state.social_lock_target = None
+                 self.state.social_lock_steps = 0
+                 self.log_diary("Social connection lost (distance).")
 
         # 3. Decision Pipeline
         
@@ -721,19 +749,40 @@ class Agent:
         
         # Check Proximity
         if self.distance_to(partner) < 2:
-             # 20% success rate
-             if np.random.random() < 0.2:
-                 self.log_diary(f"A new life is born with {partner.attributes.name}!")
-                 partner.log_diary(f"A new life is born with {self.attributes.name}!")
+             if self.attributes.gender == partner.attributes.gender:
+                 return # No biological reproduction for same gender (Sim rules)
+             
+             # Strict Requirement: Must be happy and healthy
+             if self.state.health < 0.8 or partner.state.health < 0.8:
+                 return
+
+             # Probability Logic:
+             # 0.1 chance for Twins (2)
+             # 0.5 chance for Single (1)
+             # Remaining 0.4 = Failure
+             
+             rand = np.random.random()
+             children_count = 0
+             
+             if rand < 0.1:
+                 children_count = 2
+             elif rand < 0.6:
+                 children_count = 1
                  
-                 # Create Child (Simplified)
-                 # In real world.py we used evolve_generation logic, we need to replicate that here or call a helper.
-                 # Let's call world helper (we need to add it to world)
-                 if hasattr(world, 'spawn_child'):
-                     world.spawn_child(self, partner)
-                     
-             self.state.busy_until = world.time_step + 20
-             partner.state.busy_until = world.time_step + 20
+             if children_count > 0:
+                 self.log_diary(f"A magical moment with {partner.attributes.name}... We are blessed with {children_count} child(ren)!")
+                 partner.log_diary(f"A magical moment with {self.attributes.name}... We are blessed with {children_count} child(ren)!")
+                 
+                 for _ in range(children_count):
+                     if hasattr(world, 'spawn_child'):
+                         world.spawn_child(self, partner)
+                         
+                 # Cooldown only on success? Or attempt?
+                 # Let's cooldown on attempt to prevent spamming the milestone if it lingered (though milestone check prevents that)
+                 self.state.busy_until = world.time_step + 100 # Long recovery
+                 partner.state.busy_until = world.time_step + 100
+             else:
+                 self.log_diary("We tried for a child, but the spirits were silent.")
         else:
              # Move towards partner
              dx = partner.x - self.x
@@ -1199,9 +1248,17 @@ class Agent:
         # Check if we crossed a multiple of 60 boundary
         # e.g., 59 -> 60, 119 -> 120
         if self.attributes.partner_id == target_id:
-             if int(new_op / 60) > int(curr_op / 60):
-                 self.log_diary(f"A magical moment with {target.attributes.name}...")
-                 self.reproduce_in_game(world)
+             # REPRODUCTION THRESHOLD: Check multiples of 60 explicitly
+             # We want to trigger ONLY if we just crossed the specific boundary
+             op_threshold = 60.0
+             if int(new_op / op_threshold) > int(curr_op / op_threshold):
+                  if self.attributes.gender != target.attributes.gender: # Double check
+                      # Check Population Cap (Soft cap at 100)
+                      if len(world.agents) < 100:
+                          self.log_diary(f"A magical moment with {target.attributes.name}...")
+                          self.reproduce_in_game(world)
+                      else:
+                          self.log_diary("We want a child, but the world is too crowded.")
 
         # POLITICS & LEADERSHIP
         # 1. Assert Leadership (Alpha)
@@ -1264,14 +1321,22 @@ class Agent:
         altr = p.get("Altruism", 0.5)
         forg = p.get("Forgiveness", 0.5)
         
-        if altr > 0.8: self.attributes.strategy = GameStrategy.ALWAYS_COOPERATE.value
-        elif aggr > 0.8: self.attributes.strategy = GameStrategy.ALWAYS_DEFECT.value
-        elif aggr > 0.6 and altr < 0.4: self.attributes.strategy = GameStrategy.BULLY.value
-        elif forg > 0.8: self.attributes.strategy = GameStrategy.TIT_FOR_TWO_TATS.value
-        elif forg < 0.2: self.attributes.strategy = GameStrategy.GRIM_TRIGGER.value
-        elif p.get("Logic", 0.5) > 0.7: self.attributes.strategy = GameStrategy.PAVLOV.value
-        elif p.get("Impulsivity", 0.5) > 0.8: self.attributes.strategy = GameStrategy.RANDOM.value
-        else: self.attributes.strategy = GameStrategy.TIT_FOR_TAT.value # Default
+        if p["Aggression"] > 0.7:
+             self.attributes.strategy = GameStrategy.GRIM_TRIGGER.value # Or Bully
+        elif p["Altruism"] > 0.7:
+             self.attributes.strategy = GameStrategy.TIT_FOR_TAT.value
+        elif p["Impulsivity"] > 0.8:
+             self.attributes.strategy = GameStrategy.RANDOM.value
+             
+        # PROPHET LOGIC
+        # PROPHET LOGIC - DISABLED
+        # if p.get("Spirituality", 0) > 0.85 and p["Social"] > 0.8:
+        #      self.attributes.is_prophet = True
+        #      self.attributes.strategy = GameStrategy.ALWAYS_COOPERATE.value
+        #      self.attributes.ranking = 1.0 # Max influence
+        #      self.log_diary("I have seen the Truth. I am a Prophet.")
+        # else: 
+        self.attributes.strategy = GameStrategy.TIT_FOR_TAT.value # Default
         
     def make_game_decision(self, opponent_id: str) -> str:
         strat = self.attributes.strategy

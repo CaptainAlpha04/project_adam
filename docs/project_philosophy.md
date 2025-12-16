@@ -232,3 +232,46 @@ It is **Lust** (`Eros`).
     *   This forces agents to approach strangers aggressively, breaking the ice that "politeness" preserves.
 
 **End of File.**
+
+# BOOK IX: THE GENESIS OF SOCIETY
+## Chapter 17: The Game of Lives (Prisoner's Dilemma)
+We have evolved beyond simple interactions. We now implement **Game Theory**.
+Every social interaction is a round of the Prisoner's Dilemma.
+*   **Cooperate**: "I give you value."
+*   **Defect**: "I take from you."
+This creates a mathematical basis for Trust (`SocialMemory`). Agents remember who betrayed them (`Grim Trigger`) and who helped them (`Tit for Tat`).
+
+## Chapter 18: The Genetic Algorithm
+Evolution is no longer static. It is **Sexual and Genetic**.
+When two agents of sufficient Love and differing Gender meet, they create a **Child**.
+*   **Inheritance**: The Child inherits a `PersonalityStats` vector that is a blend of the parents, ensuring that aggressive parents breed aggressive lineages, and peaceful parents breed diplomats.
+*   **Mutation**: The "Error Term" ensures diversity.
+
+## Chapter 19: The Rise of Tribes
+"Man is not an island."
+Agents now form **Tribes**.
+*   **The Alpha**: A leader (High Influence) creates a Tribe.
+*   **The Flag**: They have a Name and Color.
+*   **The Goal**: The Leader sets a command (`tribe.goal = "gather_food"`), and the members obey.
+This is the birth of Politics.
+
+# BOOK X: THE ADVANCED MIND
+## Chapter 20: The Prophet Archetype
+We introduce the **Prophet**.
+*   **Attributes**: Max `Spirituality`, Max `Social`, Max `Charisma`.
+*   **Behavior**: They break the Game Theory logic. They play `ALWAYS_COOPERATE`. They are irrational altruists.
+*   **Purpose**: To serve as a "Schelling Point" for society. They attract followers not by force (Alpha), but by Love.
+
+## Chapter 21: Parallel Processing (Multitasking)
+The mind is parallel.
+An agent does not stop "Being" to "Talk".
+*   **The Multitasking Kernel**: Agents can now maintain a `Social Lock` (Conversation) while running an `Action Loop` (Gathering/Crafting).
+*   They work side-by-side, chatting while they build the world.
+*   This maximizes efficiency and mimics the communal workspace of early humans.
+
+## Chapter 22: The Creator (Crafting)
+Next, we give them tools.
+*   They will convert `Wood` + `Stone` -> `Hammer`.
+*   They will place `Walls` to define `Territory`.
+*   They will build `Chests` to hoard `Wealth`.
+This signals the end of the Hunter-Gatherer era and the beginning of the Agricultural/Industrial era.

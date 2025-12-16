@@ -257,27 +257,30 @@ const Dashboard = ({ gameState, onSelectAgent, selectedAgentId }) => {
                             </div>
                         </div>
 
-                        {/* Social Brain (Game Theory) */}
-                        <div className="mb-2">
-                            <h3 className="text-yellow-500 font-bold uppercase text-xs tracking-widest border-b border-yellow-900/50 pb-1 mb-2">Social Brain</h3>
-                            <div className="text-xs space-y-1">
-                                <div className="flex justify-between">
-                                    <span className="text-gray-400">Strategy:</span>
-                                    <span className="text-purple-300 font-bold">{selectedAgent.strategy}</span>
+                        {/* Social Brain */}
+                        <div className="mb-4">
+                            <h3 className="text-blue-500 font-bold uppercase text-xs tracking-widest border-b border-blue-900/50 pb-1 mb-2">Social Brain</h3>
+                            <div className="grid grid-cols-2 gap-2 text-xs">
+                                <div>
+                                    <span className="text-gray-500 block text-[10px]">Strategy</span>
+                                    <span className="text-blue-300 font-mono">{selectedAgent.attributes.strategy}</span>
                                 </div>
-                                <div className="mt-1">
-                                    <span className="text-gray-500 text-[10px] uppercase">Memory of Others:</span>
-                                    <div className="flex gap-1 flex-wrap mt-1">
-                                        {selectedAgent.social_memory && Object.keys(selectedAgent.social_memory).length > 0 ? (
-                                            Object.entries(selectedAgent.social_memory).map(([id, move]) => {
-                                                const name = gameState.agents.find(a => a.id === id)?.attributes.name || "???";
-                                                return (
-                                                    <div key={id} className={`px-2 py-0.5 rounded border text-[10px] ${move === 'cooperate' ? 'bg-green-900/30 border-green-700 text-green-300' : 'bg-red-900/30 border-red-700 text-red-300'}`}>
-                                                        {name}: {move}
-                                                    </div>
-                                                )
-                                            })
-                                        ) : <span className="text-gray-600 italic text-[10px]">Tabula Rasa</span>}
+                                <div>
+                                    <span className="text-gray-500 block text-[10px]">Archetype</span>
+                                    <span className="text-purple-300 font-bold">
+                                        {selectedAgent.attributes.is_prophet ? "🔮 Prophet" : "Mortal"}
+                                    </span>
+                                </div>
+                                <div className="col-span-2">
+                                    <span className="text-gray-500 block text-[10px]">Memory</span>
+                                    <div className="max-h-16 overflow-y-auto font-mono text-[10px] text-gray-400">
+                                        {Object.entries(selectedAgent.qalb?.social_memory || {}).map(([id, move]) => (
+                                            <div key={id} className="flex justify-between">
+                                                <span>{id.substr(0, 4)}...</span>
+                                                <span className={move === 'cooperate' ? "text-green-500" : "text-red-500"}>{move}</span>
+                                            </div>
+                                        ))}
+                                        {Object.keys(selectedAgent.qalb?.social_memory || {}).length === 0 && <span>No memories yet.</span>}
                                     </div>
                                 </div>
                             </div>

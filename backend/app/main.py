@@ -32,7 +32,9 @@ world = World(width=200, height=200)
 
 # Add some initial agents
 for i in range(10):
-    agent = Agent(x=np.random.randint(0, 50), y=np.random.randint(0, 50))
+    # Enforce 50/50 split for initial population
+    gender = "male" if i % 2 == 0 else "female"
+    agent = Agent(x=np.random.randint(0, 50), y=np.random.randint(0, 50), gender=gender)
     
     # Try to load a brain (movement default)
     import os
@@ -68,8 +70,8 @@ def read_root():
 
 @app.post("/evolve")
 def evolve_world():
-    world.evolve_generation()
-    return {"message": "Evolution triggered", "generation": world.generation}
+    # world.evolve_generation()
+    return {"message": "Evolution is continuous. Agents reproduce biologically.", "generation": world.generation}
 
 @app.post("/speed")
 def set_speed(speed: float):
