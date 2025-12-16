@@ -328,6 +328,29 @@ const Dashboard = ({ gameState, onSelectAgent, selectedAgentId }) => {
                                     </span>
                                 </div>
                                 <div className="col-span-2">
+                                    <span className="text-gray-500 block text-[10px]">Family</span>
+                                    <div className="flex flex-col gap-1">
+                                        <div className="flex flex-wrap gap-1">
+                                            <span className="text-gray-400">Parents:</span>
+                                            {selectedAgent.attributes.parents?.map(pid => (
+                                                <span key={pid} className="text-gray-300 bg-gray-800 px-1 rounded">
+                                                    {gameState.agents.find(a => a.id === pid)?.attributes.name || "Dead"}
+                                                </span>
+                                            ))}
+                                            {(!selectedAgent.attributes.parents || selectedAgent.attributes.parents.length === 0) && <span className="text-gray-600">-</span>}
+                                        </div>
+                                        <div className="flex flex-wrap gap-1">
+                                            <span className="text-gray-400">Children:</span>
+                                            {selectedAgent.attributes.children?.map(cid => (
+                                                <span key={cid} className="text-gray-300 bg-gray-800 px-1 rounded">
+                                                    {gameState.agents.find(a => a.id === cid)?.attributes.name || "Unknown"}
+                                                </span>
+                                            ))}
+                                            {(!selectedAgent.attributes.children || selectedAgent.attributes.children.length === 0) && <span className="text-gray-600">-</span>}
+                                        </div>
+                                    </div>
+                                </div>
+                                <div className="col-span-2">
                                     <span className="text-gray-500 block text-[10px]">Social Circle</span>
                                     <div className="flex gap-2">
                                         <span className="text-green-400" title="Friends">💚 {selectedAgent.attributes.friend_ids?.length || 0}</span>

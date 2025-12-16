@@ -81,6 +81,8 @@ class AgentAttributes:
     generation: int = 1
     partner_id: Optional[str] = None
     friend_ids: List[str] = field(default_factory=list)
+    parents: List[str] = field(default_factory=list) # [parent1_id, parent2_id]
+    children: List[str] = field(default_factory=list) # [child1_id, ...]
     values: Dict[str, float] = field(default_factory=dict)
     
     # Social Hierarchy
@@ -822,14 +824,30 @@ class Agent:
         if self.attributes.leader_id and self.attributes.leader_id != self.id:
             leader = world.agents.get(self.attributes.leader_id)
             if leader:
-                # 20% bias to move towards leader
-                if np.random.random() < 0.2:
-                    dx = leader.x - self.x
-                    dy = leader.y - self.y
-                    # Normalize
-                    mx = 1 if dx > 0 else -1 if dx < 0 else 0
-                    my = 1 if dy > 0 else -1 if dy < 0 else 0
-                    self.state.momentum_dir = (mx, my)
+                # COHESION BIAS: 30% chance to correct course towards swarm center
+                dist = self.distance_to(leader)
+                if dist > 3.0: # Too far, catch up
+                     if np.random.random() < 0.3:
+                        dx = leader.x - self.x
+                        dy = leader.y - self.y
+                        # Normalize
+                        mx = 1 if dx > 0 else -1 if dx < 0 else 0
+                        my = 1 if dy > 0 else -1 if dy < 0 else 0
+                        self.state.momentum_dir = (mx, my)
+
+        # Apply Momentum (Drift)
+        if np.random.random() < 0.6:
+             mx, my = self.state.momentum_dir
+             if mx != 0 or my != 0:
+                 world.move_agent(self.id, mx, my)
+                 return
+                 
+        # Explicit Random
+        mx = np.random.randint(-1, 2)
+        my = np.random.randint(-1, 2)
+        # Update momentum
+        self.state.momentum_dir = (mx, my)
+        world.move_agent(self.id, mx, my)
 
         # PERCEPTION-AWARE EXPLORATION
         # Instead of blind momentum, look ahead.
@@ -1238,9 +1256,17 @@ class Agent:
              self.log_diary(f"{target.attributes.name} is my Best Friend!")
         # Lovers
         if new_op >= 30 and curr_op < 30:
-             if self.attributes.gender != target.attributes.gender:
-                 self.log_diary(f"I am in love with {target.attributes.name}!")
-                 self.attributes.partner_id = target_id
+             # INCEST CHECK
+             # Avoid if target is parent, child, or sibling (share parents)
+             is_family = (target_id in self.attributes.parents or 
+                          target_id in self.attributes.children or
+                          (self.attributes.parents and target.attributes.parents and set(self.attributes.parents) & set(target.attributes.parents)))
+             
+             if is_family:
+                  self.log_diary(f"{target.attributes.name} is my beloved kin.")
+             elif self.attributes.gender != target.attributes.gender:
+                  self.log_diary(f"I am in love with {target.attributes.name}!")
+                  self.attributes.partner_id = target_id
              else:
                  self.log_diary(f"{target.attributes.name} is my Brother/Sister in arms!")
 
