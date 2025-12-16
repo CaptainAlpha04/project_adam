@@ -367,10 +367,40 @@ class Qalb:
         if has_stone: desires["Craft"] += 0.3
         if has_stone and tribe_goal == "build_home": desires["Craft"] += 0.4
         
-        # Building
-        desires["Build"] = 0.0
         if has_block: desires["Build"] += 0.4
         if has_block and tribe_goal == "build_home": desires["Build"] += 0.6
+        
+        # 7. Social Economy (Trade / Gift)
+        desires["Trade"] = 0.0
+        desires["Gift"] = 0.0
+        
+        inventory_count = sum([s['count'] for s in self.agent.inventory])
+        
+        
+        # Look at visible neighbors
+        for agent_id, state in self.agent.visible_agents_state.items():
+             # Distance check (must be close to trade)
+             # We need real object to check dist, or just use memory pos. 
+             # Simplify: If in visible_agents_state, we assume we can interact if we walk to them?
+             # Or we only trade if neighbor is VERY close (< 2).
+             # Let's assume we need to approach them.
+             
+             # GIFTING (Altruism): Friend is needy
+             op = self.opinions.get(agent_id, 0) # Raw opinion
+             is_friend = op > 20
+             is_needy = state['hunger'] > 0.7 or state['health'] < 0.5
+             if is_friend and is_needy:
+                 if p["Altruism"] > 0.6 and inventory_count > 5:
+                     desires["Gift"] = max(desires["Gift"], 0.8)
+                     
+             # TRADING (Self-Interest): I am needy, they have surplus
+             am_needy = self.agent.nafs.hunger > 0.6
+             if am_needy and "Food" in str(state['inventory']): # Loose check for food items
+                  desires["Trade"] = max(desires["Trade"], 0.7)
+                  
+             # General Trading (Crafting needs)
+             if desires["Find Wood"] > 0.5 and "Wood" in str(state['inventory']):
+                  desires["Trade"] = max(desires["Trade"], 0.6)
         
         # DAMPENER: Full Inventory
         inventory_count = sum([s['count'] for s in self.agent.inventory])
@@ -435,6 +465,12 @@ class Qalb:
              
         elif dominant_desire == "Build":
              return {'action': 'build_structure', 'structure': 'Wall', 'desc': "Building boundaries."}
+             
+        elif dominant_desire == "Gift":
+             return {'action': 'social_trade', 'mode': 'gift', 'desc': "Bearing gifts."}
+             
+        elif dominant_desire == "Trade":
+             return {'action': 'social_trade', 'mode': 'barter', 'desc': "Looking to trade."}
         
         # Default
         return {'action': 'wander', 'desc': "Contemplating existence."}
@@ -506,6 +542,7 @@ class Agent:
         self.knowledge: List[str] = []
         self.diary: List[str] = []
         self.visible_agents: List[str] = [] # List of names of currently seen agents
+        self.visible_agents_state: Dict[str, Dict] = {} # ID -> Public State
         
         # Spatial Memory
         
@@ -663,6 +700,31 @@ class Agent:
         elif action == 'continue_social':
              self.process_social_loop(world)
              
+        elif action == 'social_trade':
+         # Find target (nearest visible agent or specific target from plan?)
+         # For simplicity, pick nearest visible agent.
+         # Ideally plan should have target_id.
+         # But propose_action didn't select specific id, just 'anyone'.
+         # Let's find best candidate again.
+         best_candidate = None
+         min_dist = 999
+         for other_id, state in self.visible_agents_state.items():
+             other = world.agents.get(other_id)
+             if not other: continue
+             d = self.distance_to(other)
+             if d < min_dist:
+                 min_dist = d
+                 best_candidate = other
+         
+         if best_candidate:
+             if min_dist < 2.0:
+                 mode = plan.get('mode', 'barter')
+                 self.initiate_trade(best_candidate, mode, world)
+             else:
+                 # Move towards them
+                 self.navigate_to(best_candidate.x, best_candidate.y, world)
+         else:
+             self.log_diary("Nobody to trade with.")
         elif action == 'socialize':
             self.qalb_socialize(world)
         
@@ -829,6 +891,9 @@ class Agent:
                     mem_entry['time'] = world.time_step
                 else:
                     self.spatial_memory['agent'].append({'pos': (other.x, other.y), 'id': other.id, 'time': world.time_step})
+                
+                # PUBLIC STATE OBSERVATION
+                self.visible_agents_state[other.id] = other.get_public_state()
                 
                 # DEBUG: Log sighting
                 self.log_diary(f"DEBUG: Saw {other.attributes.name} at {dist:.1f}")
@@ -1133,11 +1198,17 @@ class Agent:
         return True
 
     def _add_to_inventory(self, item):
+        # Capacity Check
+        total_count = sum([s['count'] for s in self.inventory])
+        if total_count >= 20:
+             return False
+
         for slot in self.inventory:
             if slot['item']['name'] == item.name:
                 slot['count'] += 1
-                return
+                return True
         self.inventory.append({'item': item.to_dict(), 'count': 1})
+        return True
 
     def eat_from_inventory(self) -> bool:
         for i, slot in enumerate(self.inventory):
@@ -1477,27 +1548,54 @@ class Agent:
              self.qalb.social_cooldowns[target_id] = world.time_step + 60
 
     def determine_strategy(self):
+        """
+        Determine Game Theory Strategy based on Personality with Stochastic Diversity.
+        """
         p = self.attributes.personality_vector
-        aggr = p.get("Aggression", 0.5)
-        altr = p.get("Altruism", 0.5)
-        forg = p.get("Forgiveness", 0.5)
         
-        if p["Aggression"] > 0.7:
-             self.attributes.strategy = GameStrategy.GRIM_TRIGGER.value # Or Bully
-        elif p["Altruism"] > 0.7:
-             self.attributes.strategy = GameStrategy.TIT_FOR_TAT.value
-        elif p["Impulsivity"] > 0.8:
-             self.attributes.strategy = GameStrategy.RANDOM.value
+        # Base Probabilities
+        strategies = [
+            GameStrategy.TIT_FOR_TAT.value,
+            GameStrategy.GRIM_TRIGGER.value,
+            GameStrategy.ALWAYS_COOPERATE.value,
+            GameStrategy.ALWAYS_DEFECT.value,
+            GameStrategy.RANDOM.value,
+            GameStrategy.PAVLOV.value
+        ]
+        
+        weights = [0.4, 0.1, 0.1, 0.1, 0.1, 0.2] # Default bias towards TFT and Pavlov
+        
+        # Personality Modifiers
+        if p["Aggression"] > 0.6:
+            # More likely to Defect/Grim
+            weights = [0.2, 0.3, 0.05, 0.3, 0.05, 0.1]
+        elif p["Altruism"] > 0.6:
+            # More likely to Cooperate/TFT
+            weights = [0.4, 0.05, 0.4, 0.0, 0.05, 0.1]
+        elif p["Impulsivity"] > 0.7:
+            # Random/Pavlov
+            weights = [0.1, 0.05, 0.05, 0.1, 0.5, 0.2]
+        elif p["Logic"] > 0.7:
+             # Pavlov (Win-Stay, Lose-Switch) or TFT are logical
+             weights = [0.4, 0.0, 0.0, 0.0, 0.0, 0.6]
              
-        # PROPHET LOGIC
-        # PROPHET LOGIC - DISABLED
-        # if p.get("Spirituality", 0) > 0.85 and p["Social"] > 0.8:
-        #      self.attributes.is_prophet = True
-        #      self.attributes.strategy = GameStrategy.ALWAYS_COOPERATE.value
-        #      self.attributes.ranking = 1.0 # Max influence
-        #      self.log_diary("I have seen the Truth. I am a Prophet.")
-        # else: 
-        self.attributes.strategy = GameStrategy.TIT_FOR_TAT.value # Default
+        # Normalize weights
+        total = sum(weights)
+        norm_weights = [w/total for w in weights]
+        
+        self.attributes.strategy = np.random.choice(strategies, p=norm_weights)
+        
+    def get_public_state(self):
+        """
+        Returns observable state for other agents.
+        """
+        return {
+            "id": self.id,
+            "health": self.state.health,
+            "hunger": self.nafs.hunger,
+            "inventory": [slot['item']['name'] for slot in self.inventory], # List of item names
+            "tribe": self.attributes.tribe_id
+        }
         
     def make_game_decision(self, opponent_id: str) -> str:
         strat = self.attributes.strategy
@@ -1561,6 +1659,189 @@ class Agent:
             return 'cooperate'
             
         return 'cooperate'
+
+    # --- TRADE & ECONOMY ---
+
+    def initiate_trade(self, target, mode, world):
+        """
+        Calculates Offer/Request and asks Target.
+        """
+        # 1. Determine Needs & Surplus
+        my_inventory = [s['item']['name'] for s in self.inventory]
+        # target_inventory = target.get_public_state()['inventory'] # Use public perception
+        
+        offer_item = None
+        request_item = None
+        
+        # Determine Surplus (More than 2 of something)
+        counts = {}
+        for i in my_inventory: counts[i] = counts.get(i, 0) + 1
+        surplus = [k for k,v in counts.items() if v > 2]
+        
+        # Determine Need
+        needs = []
+        if self.nafs.hunger > 0.5: needs.append("Fruit") # Specifics
+        if self.attributes.personality_vector["Conscientiousness"] > 0.5: # Builder
+             if "Wood" not in my_inventory: needs.append("Wood")
+        
+        if mode == 'gift':
+             if surplus:
+                 # Offer random surplus
+                 offer_item_name = np.random.choice(surplus)
+                 # Find actual item object
+                 for slot in self.inventory:
+                     if slot['item']['name'] == offer_item_name:
+                         offer_item = slot['item']
+                         break
+                 request_item = None # It's a gift
+             else:
+                 self.log_diary("Wanted to gift but had no surplus.")
+                 return
+                 
+        elif mode == 'barter':
+             # I need X, I offer Y
+             if needs:
+                 request_item_name = needs[0] # Simplistic
+                 # Do they have it? (Based on perception)
+                 # state = self.visible_agents_state.get(target.id)
+                 # if not state or request_item_name not in str(state['inventory']):
+                 #    return # Don't ask if they don't have it (or ask anyway?)
+                 
+                 # Find offer
+                 if surplus:
+                     offer_name = surplus[0]
+                     for slot in self.inventory:
+                         if slot['item']['name'] == offer_name:
+                             offer_item = slot['item']
+                             break
+                 else:
+                     # Begging? (Offer None)
+                     offer_item = None
+                     
+                 # Construct Request (We don't have item object for request, just name)
+                 request_item = request_item_name
+             else:
+                 self.log_diary("Wanted to trade but decided I need nothing.")
+                 return
+
+        # 2. Propose
+        accepted = target.evaluate_trade(self, offer_item, request_item)
+        
+        if accepted:
+            self.log_diary(f"Trade successful with {target.attributes.name} ({mode}).")
+            self.execute_trade_transaction(target, offer_item, request_item, world)
+            
+            # Opinion Boost
+            impact = 5 if mode == 'gift' else 1
+            self.qalb.update_opinion(target.id, impact)
+            target.qalb.update_opinion(self.id, impact)
+        else:
+            self.log_diary(f"Trade rejected by {target.attributes.name}.")
+            if mode == 'barter':
+                 self.qalb.update_opinion(target.id, -1)
+
+    def evaluate_trade(self, proponent, offer_item, request_item_name) -> bool:
+        """
+        Decide whether to accept the trade using VALUE system.
+        """
+        # 1. Capacity Check
+        current_count = sum([s['count'] for s in self.inventory])
+        if current_count >= 20 and offer_item:
+             # If I receive an item, do I have space?
+             # Barter 1 for 1 is neutral. Gift receiving requires space.
+             if not request_item_name: # Gift
+                  return False # Full
+             # Barter: 1 in, 1 out. OK.
+        
+        # 2. Can I fulfill request?
+        if request_item_name:
+            has_item = False
+            for slot in self.inventory:
+                if slot['item']['name'] == request_item_name:
+                     has_item = True
+                     break
+            if not has_item: return False
+            
+        # 3. Value Calculation
+        offer_val = offer_item['value'] if offer_item else 0
+        
+        # Get request value from BASE_VALUES via name
+        from ..env.item import BASE_VALUES
+        request_val = BASE_VALUES.get(request_item_name, 1) if request_item_name else 0
+        
+        # 4. Logic
+        # Gift (Request is None): YES
+        if request_item_name is None: return True
+             
+        # Begging (Offer is None): Friends only
+        if offer_item is None:
+             op = self.qalb.opinions.get(proponent.id, 0)
+             return op > 20 or self.attributes.personality_vector["Altruism"] > 0.7
+             
+        # Barter
+        # Critical Need Override
+        my_needs = []
+        if self.nafs.hunger > 0.5: my_needs.append("Fruit")
+        if offer_item['name'] in my_needs: return True
+
+        # Fair Value Check
+        # Accept if Offer >= Request (or close enough/friend bonus)
+        # Friend bonus: Discount 20%
+        op = self.qalb.opinions.get(proponent.id, 0)
+        discount = 0.8 if op > 10 else 1.0
+        
+        if offer_val >= (request_val * discount):
+             return True
+             
+        return False
+        
+    def execute_trade_transaction(self, target, offer_item, request_item_name, world):
+        """
+        Moves items between inventories.
+        """
+        mode = 'gift' if not request_item_name else 'barter'
+        
+        # Move Offer to Target
+        if offer_item:
+             # Find in my inventory and remove 1
+             for slot in self.inventory:
+                 if slot['item']['name'] == offer_item['name']:
+                     slot['count'] -= 1
+                     if slot['count'] <= 0: self.inventory.remove(slot)
+                     break
+             
+             # Add to Target (Manually respecting capacity? Target accepted so assumed ok)
+             found = False
+             for slot in target.inventory:
+                 if slot['item']['name'] == offer_item['name']:
+                     slot['count'] += 1
+                     found = True
+                     break
+             if not found:
+                 target.inventory.append({'item': offer_item, 'count': 1})
+                 
+        # Move Request to Me (from Target)
+        if request_item_name:
+             for slot in target.inventory:
+                 if slot['item']['name'] == request_item_name:
+                     slot['count'] -= 1
+                     # Deep copy item dict before removing??
+                     item_data = slot['item'].copy()
+                     if slot['count'] <= 0: target.inventory.remove(slot)
+                     
+                     # Add to Me
+                     found = False
+                     for s in self.inventory:
+                         if s['item']['name'] == request_item_name:
+                             s['count'] += 1
+                             found = True
+                             break
+                     if not found:
+                         self.inventory.append({'item': item_data, 'count': 1})
+                     break
+        
+        # Log to World
+        world.log_trade(self, target, offer_item, request_item_name, mode)
 
     # --- HELPERS ---
 
