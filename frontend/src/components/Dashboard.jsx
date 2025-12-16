@@ -141,7 +141,7 @@ const CharacterSheet = React.memo(({ agent, gameState, onSelectAgent, agentMap }
 
                 {/* Tabs */}
                 <div className="absolute bottom-0 left-0 w-full flex bg-stone-950/50">
-                    {['overview', 'social', 'inventory'].map(t => (
+                    {['overview', 'social', 'tribe', 'inventory'].map(t => (
                         <button
                             key={t}
                             onClick={() => setTab(t)}
@@ -298,6 +298,73 @@ const CharacterSheet = React.memo(({ agent, gameState, onSelectAgent, agentMap }
                                 {Object.keys(agent.qalb.opinions).length === 0 && <span className="text-xs text-stone-500 italic">No opinions formed.</span>}
                             </div>
                         </div>
+                    </div>
+                )}
+
+                {/* TRIBE TAB */}
+                {tab === 'tribe' && (
+                    <div className="space-y-4">
+                        <div className="p-4 bg-stone-800/40 rounded border border-stone-600 flex flex-col items-center">
+                            <div className="w-16 h-16 rounded-full border-4 border-yellow-600 shadow-xl mb-2 flex items-center justify-center bg-stone-900" style={{ borderColor: agent.attributes.tribe_color || '#d97706' }}>
+                                <span className="text-2xl">🚩</span>
+                            </div>
+                            <h2 className="text-xl font-serif font-bold text-yellow-100">{agent.tribe_name}</h2>
+                            <span className="text-xs text-stone-400 uppercase tracking-widest mt-1">Goal: {agent.tribe_goal.replace('_', ' ')}</span>
+                        </div>
+
+                        {/* NOMAD CHECK - Don't cluster Nomads */}
+                        {(!agent.attributes.tribe_id || agent.tribe_name === "Nomad") ? (
+                            <div className="text-center p-8 text-stone-500 italic border border-stone-800 rounded bg-stone-900/50">
+                                <p>"The world is your home. You walk alone, bound by no chief."</p>
+                            </div>
+                        ) : (
+                            <>
+                                {/* Harmony Meter */}
+                                <div className="bg-stone-900/80 p-3 rounded border border-stone-800">
+                                    <div className="flex justify-between items-end mb-1">
+                                        <span className="text-xs text-stone-500 font-bold uppercase">Tribe Harmony</span>
+                                        <span className={`text-lg font-bold ${(!agent.tribe_harmony || agent.tribe_harmony < 50) ? 'text-red-400' : 'text-green-400'}`}>
+                                            {(agent.tribe_harmony || 50).toFixed(0)}%
+                                        </span>
+                                    </div>
+                                    <div className="w-full h-2 bg-stone-800 rounded-full overflow-hidden">
+                                        <div
+                                            className={`h-full transition-all duration-500 ${(!agent.tribe_harmony || agent.tribe_harmony < 50) ? 'bg-red-600' : 'bg-green-600'}`}
+                                            style={{ width: `${agent.tribe_harmony || 50}%` }}
+                                        ></div>
+                                    </div>
+                                    <p className="text-[10px] text-stone-500 mt-2 italic text-center">
+                                        {(!agent.tribe_harmony || agent.tribe_harmony < 50) ? "Discord breeds chaos and rebellion." : "Unity is strength."}
+                                    </p>
+                                </div>
+
+                                {/* Tribe Members */}
+                                <div>
+                                    <SectionHeader title="Tribesmen" />
+                                    <div className="flex flex-wrap gap-2">
+                                        {gameState.agents
+                                            .filter(a => a.attributes.tribe_id === agent.attributes.tribe_id)
+                                            .map(member => (
+                                                <button
+                                                    key={member.id}
+                                                    onClick={() => onSelectAgent(member.id)}
+                                                    className={`flex items-center gap-2 bg-stone-800 px-2 py-1 rounded border border-stone-700 hover:bg-stone-700 transition-colors ${member.id === agent.attributes.leader_id ? 'border-yellow-500/50' : ''}`}
+                                                >
+                                                    <span className="text-lg">{member.attributes.gender === 'male' ? '🧔' : '👩'}</span>
+                                                    <div className="flex flex-col items-start">
+                                                        <span className={`text-xs font-bold ${member.id === agent.id ? 'text-yellow-200' : 'text-stone-300'}`}>
+                                                            {member.attributes.name}
+                                                            {member.id === agent.attributes.leader_id && <span className="text-yellow-500 ml-1">👑</span>}
+                                                        </span>
+                                                        <span className="text-[9px] text-stone-500 uppercase">{member.attributes.job}</span>
+                                                    </div>
+                                                </button>
+                                            ))
+                                        }
+                                    </div>
+                                </div>
+                            </>
+                        )}
                     </div>
                 )}
 

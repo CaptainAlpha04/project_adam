@@ -64,7 +64,7 @@ const MapCanvas = ({ gameState, selectedAgentId, onSelectAgent, mapMode = 'TERRA
 
     // --- DRAWING LAYERS ---
 
-    // 1. TERRAIN
+    // 1. TERRAIN & DECOR
     if (gameState.terrain) {
       gameState.terrain.forEach((row, y) => {
         row.forEach((tileType, x) => {
@@ -79,30 +79,17 @@ const MapCanvas = ({ gameState, selectedAgentId, onSelectAgent, mapMode = 'TERRA
             default: color = '#000';
           }
 
-          // Map Mode Overrides
-          if (mapMode === 'POLITICAL') {
-            // If we had territory data, we'd color here. For now, keep terrain.
-            // Or maybe desaturate terrain to make agents pop?
-            // keeping terrain for now as base.
-          }
-
           ctx.fillStyle = color;
           ctx.fillRect(x * TILE_SIZE, y * TILE_SIZE, TILE_SIZE, TILE_SIZE);
 
           // Grid Lines (Only visible at high zoom)
           if (scale > 2) {
             ctx.strokeStyle = COLORS.GRID;
-            ctx.lineWidth = 0.5 / scale; // Keep line thin
+            ctx.lineWidth = 0.5 / scale;
             ctx.strokeRect(x * TILE_SIZE, y * TILE_SIZE, TILE_SIZE, TILE_SIZE);
           }
 
-          // Decor: Trees for forest
-          if (tileType === 3) {
-            ctx.fillStyle = 'rgba(0,0,0,0.2)';
-            ctx.beginPath();
-            ctx.arc((x + 0.5) * TILE_SIZE, (y + 0.5) * TILE_SIZE, TILE_SIZE * 0.3, 0, Math.PI * 2);
-            ctx.fill();
-          }
+
         });
       });
     }
@@ -110,13 +97,38 @@ const MapCanvas = ({ gameState, selectedAgentId, onSelectAgent, mapMode = 'TERRA
     // 2. ITEMS
     if (gameState.items) {
       gameState.items.forEach(item => {
-        ctx.fillStyle = (item.tags && item.tags.includes('red')) ? '#ef4444' : '#9ca3af';
+        let color = '#d4d4d4'; // Default grey
+        let shape = 'circle';
+
+        if (item.tags) {
+          if (item.tags.includes('food')) { color = '#ef4444'; shape = 'circle'; } // Red Food
+          else if (item.tags.includes('wood')) { color = '#78350f'; shape = 'rect'; } // Brown Wood
+          else if (item.tags.includes('stone')) { color = '#57534e'; shape = 'rect'; } // Grey Stone
+          else if (item.tags.includes('tool')) { color = '#eab308'; shape = 'triangle'; } // Gold Tool
+        }
+
+        ctx.fillStyle = color;
+        const cx = (item.x + 0.5) * TILE_SIZE;
+        const cy = (item.y + 0.5) * TILE_SIZE;
+        const s = TILE_SIZE * 0.4;
+
         ctx.beginPath();
-        ctx.arc((item.x + 0.5) * TILE_SIZE, (item.y + 0.5) * TILE_SIZE, TILE_SIZE * 0.25, 0, Math.PI * 2);
+        if (shape === 'circle') {
+          ctx.arc(cx, cy, s / 2, 0, Math.PI * 2);
+        } else if (shape === 'rect') {
+          ctx.fillRect(cx - s / 2, cy - s / 2, s, s);
+        } else {
+          // Triangle for tools
+          ctx.moveTo(cx, cy - s / 2);
+          ctx.lineTo(cx + s / 2, cy + s / 2);
+          ctx.lineTo(cx - s / 2, cy + s / 2);
+          ctx.closePath();
+        }
         ctx.fill();
+
+        ctx.strokeStyle = 'black';
         ctx.lineWidth = 1 / scale;
-        ctx.strokeStyle = 'rgba(0,0,0,0.5)';
-        ctx.stroke();
+        ctx.stroke(); // Add outline
       });
     }
 
@@ -129,9 +141,6 @@ const MapCanvas = ({ gameState, selectedAgentId, onSelectAgent, mapMode = 'TERRA
 
         // Base Color
         let color = agent.attributes.gender === 'male' ? '#3b82f6' : '#ec4899';
-
-        // Tribe Color Override (if political mode)
-        // Ensure accurate coloring based on tribe if available
         if (mapMode === 'POLITICAL' && agent.attributes.tribe_color) {
           color = agent.attributes.tribe_color;
         }
@@ -153,8 +162,7 @@ const MapCanvas = ({ gameState, selectedAgentId, onSelectAgent, mapMode = 'TERRA
         }
         ctx.stroke();
 
-        // Direction Indicator (if they have 'facing' or just simple dot)
-        // Just a simple eye dot for now
+        // Direction / Face
         ctx.fillStyle = 'white';
         ctx.beginPath();
         ctx.arc(cx, cy - radius * 0.3, radius * 0.2, 0, Math.PI * 2);
@@ -163,13 +171,12 @@ const MapCanvas = ({ gameState, selectedAgentId, onSelectAgent, mapMode = 'TERRA
         // Name Tag (Zoom dependent)
         if (scale > 2.5) {
           ctx.fillStyle = 'white';
-          ctx.font = `bold ${Math.max(10, 4 / scale)}px sans-serif`; // Fixed size slightly
+          ctx.font = `bold ${Math.max(10, 4 / scale)}px sans-serif`;
           ctx.textAlign = 'center';
           ctx.textBaseline = 'bottom';
           ctx.shadowColor = 'black';
           ctx.shadowBlur = 4;
           ctx.lineWidth = 3;
-          // ctx.strokeText(agent.attributes.name, cx, cy - radius - 2); // heavy
           ctx.fillText(agent.attributes.name, cx, cy - radius * 1.5);
           ctx.shadowBlur = 0;
         }
@@ -181,11 +188,25 @@ const MapCanvas = ({ gameState, selectedAgentId, onSelectAgent, mapMode = 'TERRA
       gameState.animals.forEach(anim => {
         const cx = (anim.x + 0.5) * TILE_SIZE;
         const cy = (anim.y + 0.5) * TILE_SIZE;
-        ctx.fillStyle = anim.type === 'carnivore' ? '#7f1d1d' : '#854d0e'; // Dark Red / Brown
+
+        let color = '#a8a29e'; // Default Grey
+        if (anim.type === 'carnivore') color = '#dc2626'; // Red Wolf
+        else if (anim.type === 'herbivore') color = '#fb923c'; // Orange Deer
+
+        ctx.fillStyle = color;
         ctx.beginPath();
-        ctx.moveTo(cx, cy - TILE_SIZE * 0.4);
-        ctx.lineTo(cx + TILE_SIZE * 0.3, cy + TILE_SIZE * 0.3);
-        ctx.lineTo(cx - TILE_SIZE * 0.3, cy + TILE_SIZE * 0.3);
+        // Triangle shape for animals to distinguish from agents (circles)
+        const s = TILE_SIZE * 0.5;
+        ctx.moveTo(cx, cy - s / 2);
+        ctx.lineTo(cx + s / 2, cy + s / 2);
+        ctx.lineTo(cx - s / 2, cy + s / 2);
+        ctx.closePath();
+        ctx.fill();
+
+        // Eye
+        ctx.fillStyle = 'white';
+        ctx.beginPath();
+        ctx.arc(cx, cy - s / 6, s / 10, 0, Math.PI * 2);
         ctx.fill();
       });
     }

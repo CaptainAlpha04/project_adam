@@ -656,6 +656,11 @@ class Agent:
             
         elif action == 'wander':
             self.move_random(world)
+            
+        # --- NEW ACTIONS ---
+        elif action == 'join_tribe':
+            target_tribe_id = plan.get('tribe_id')
+            self.join_tribe(target_tribe_id, world)
             self.gather(world) # Opportunistic
             
         elif action == 'find_resource':
@@ -1922,6 +1927,7 @@ class Agent:
             "tribe_id": self.attributes.tribe_id,
             "tribe_name": world.tribes[self.attributes.tribe_id].name if world and self.attributes.tribe_id and self.attributes.tribe_id in world.tribes else "Nomad",
             "tribe_goal": world.tribes[self.attributes.tribe_id].goal if world and self.attributes.tribe_id and self.attributes.tribe_id in world.tribes else "wander",
+            "tribe_harmony": world.tribes[self.attributes.tribe_id].calculate_harmony(world) if world and self.attributes.tribe_id and self.attributes.tribe_id in world.tribes else 50.0,
             "generation": self.attributes.generation
         }
     
@@ -1978,7 +1984,49 @@ class Agent:
     def load_brain(self, path):
         self.qalb.load_brain(path)
         
-    def act_smart(self, world):
-        pass
+
+    def join_tribe(self, tribe_id, world):
+        """
+        Handles the logic of joining a tribe, including Chief Transition.
+        """
+        if self.attributes.tribe_id == tribe_id: return
+        
+        new_tribe = world.tribes.get(tribe_id)
+        if not new_tribe: return
+        
+        old_tribe_id = self.attributes.tribe_id
+        
+        # 1. Chief Transition Check
+        # Am I a leader of a different tribe?
+        if self.attributes.leader_id == self.id and len(self.attributes.followers) > 0:
+             self.log_diary(f"I, Chief {self.attributes.name}, am submitting to {new_tribe.name}.")
+             
+             # Option A: Migrate whole tribe (Merge)
+             # Move all followers to new tribe
+             # Create a copy of the list to iterate safely
+             followers_to_migrate = list(self.attributes.followers)
+             for follower_id in followers_to_migrate:
+                 follower = world.agents.get(follower_id)
+                 if follower:
+                     # Recursive but safe if logic holds
+                     follower.join_tribe(tribe_id, world) 
+                     follower.attributes.leader_id = new_tribe.leader_id 
+             
+        # 2. Leave Old Tribe
+        if old_tribe_id and old_tribe_id in world.tribes:
+            world.tribes[old_tribe_id].remove_member(self.id)
+            
+        # 3. Join New Tribe
+        self.attributes.tribe_id = tribe_id
+        self.attributes.leader_id = new_tribe.leader_id
+        new_tribe.add_member(self.id)
+        
+        # 4. Update New Leader's Followers list
+        if new_tribe.leader_id:
+             leader = world.agents.get(new_tribe.leader_id)
+             if leader and self.id not in leader.attributes.followers:
+                 leader.attributes.followers.append(self.id)
+                 
+        self.log_diary(f"Joined tribe: {new_tribe.name}")
 
 

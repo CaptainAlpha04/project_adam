@@ -58,7 +58,45 @@ class Tribe:
         # 3. Expansion
         self.goal = "build_home" # Placeholder for future logic
         
-    def to_dict(self):
+    def calculate_harmony(self, world) -> float:
+        """
+        Calculates the average opinion members have of each other and the leader.
+        Returns a score between 0 and 100.
+        """
+        if not self.members:
+            return 100.0
+            
+        total_score = 0
+        count = 0
+        
+        # Check opinions between all members
+        for member_id in self.members:
+            agent = world.agents.get(member_id)
+            if not agent: continue
+            
+            # Opinion of Leader
+            if self.leader_id and self.leader_id != member_id:
+                op_leader = agent.qalb.opinions.get(self.leader_id, 0)
+                total_score += op_leader
+                count += 1
+            
+            # General cohesion (sample a few peers to save perf)
+            # just checks leader for now to keep it O(N) instead of O(N^2)
+        
+        if count == 0:
+            return 50.0 # Neutral
+            
+        avg_opinion = total_score / count
+        # Map opinion (-100 to 100) to Harmony (0 to 100)
+        # 0 opinion -> 50 harmony
+        harmony = (avg_opinion + 100) / 2
+        return max(0.0, min(100.0, harmony))
+
+    def to_dict(self, world=None):
+        harmony = 0.0
+        if world:
+            harmony = self.calculate_harmony(world)
+            
         return {
             "id": self.id,
             "name": self.name,
@@ -66,5 +104,6 @@ class Tribe:
             "member_count": len(self.members),
             "color": self.color,
             "goal": self.goal,
-            "resources": self.resources
+            "resources": self.resources,
+            "harmony": harmony
         }
