@@ -342,7 +342,18 @@ class Qalb:
         else:
             desires["Work"] = 0.0
             
-        # DISTRACTION: If social opportunity is high, work less
+        # TRIBE GOAL BOOST
+        tribe_goal = None
+        if self.agent.attributes.tribe_id:
+             tribe = world.tribes.get(self.agent.attributes.tribe_id)
+             if tribe: tribe_goal = tribe.goal
+             
+        if tribe_goal == "gather_food":
+             desires["Eat"] += 0.3 # Hoarding instinct
+             desires["Work"] += 0.2
+        elif tribe_goal == "gather_wood" or tribe_goal == "gather_stone":
+             desires["Work"] += 0.4 # Duty calls
+             
         # DISTRACTION: If social opportunity is high, work less
         # MULTITASKING FIX: We want them to work even if friends are near.
         # if nearest_agent_dist < 5.0:
@@ -391,7 +402,12 @@ class Qalb:
                 return {'action': 'socialize', 'desc': "Seeking companionship."}
                 
         elif dominant_desire == "Work":
-             return {'action': 'gather_materials', 'resource': 'material', 'desc': "Building legacy."}
+             # Check Tribe Goal
+             res_target = 'wood' # Default
+             if tribe_goal == "gather_stone": res_target = 'stone'
+             elif tribe_goal == "gather_food": res_target = 'food'
+             
+             return {'action': 'find_resource', 'resource': res_target, 'desc': f"Working: {res_target}"}
         
         # Default
         return {'action': 'wander', 'desc': "Contemplating existence."}
@@ -517,6 +533,13 @@ class Agent:
         self.nafs.update(world)
         self.qalb.update(world)
         
+        # Tribe Leader Duty
+        if self.attributes.tribe_id and self.attributes.leader_id == self.id:
+            tribe = world.tribes.get(self.attributes.tribe_id)
+            if tribe and (step_count % 100 == 0): # Periodic check
+                tribe.assess_needs()
+                self.log_diary(f"Tribe Goal Updated: {tribe.goal}")
+        
         # 1.5 Perception (Vision)
         self.scan_surroundings(world)
 
@@ -575,7 +598,7 @@ class Agent:
             res_type = plan.get('resource')
             # Check Memory
             target = None
-            mem_type = 'food' if res_type == 'consumable' else 'wood' # simplified
+            mem_type = res_type # Direct mapping: 'wood', 'stone', 'food'
             
             knowns = self.spatial_memory.get(mem_type, [])
             if knowns:
@@ -981,15 +1004,59 @@ class Agent:
             self.move_random(world)
 
     def gather(self, world):
-        # Opportunistic gather
+        """
+        Gather resources with Tool Multiplier and Depletion.
+        """
         items = world.items_grid.get((self.x, self.y))
         if items:
-            item = items[0]
-            if self.can_pickup(item):
-                to_take = items.pop(0)
-                if not items: del world.items_grid[(self.x, self.y)]
-                self._add_to_inventory(to_take)
-                self.log_diary(f"Picked up {to_take.name}.")
+            to_take = items[0] # Don't pop yet
+            
+            # 1. Tool Logic
+            multiplier = 1
+            tool_tags = []
+            
+            # Check Inventory for best tool
+            for slot in self.inventory:
+                tags = slot['item'].get('tags', [])
+                if "tool" in tags:
+                     # Check compatibility
+                     if to_take.name == "Wood" and "cutting" in tags: 
+                         multiplier = 2
+                     if to_take.name == "Stone" and "mining" in tags:
+                         multiplier = 2
+            
+            # 2. Add to Inventory
+            if self.can_pickup(to_take):
+                 # Take the item
+                 items.pop(0)
+                 if not items: del world.items_grid[(self.x, self.y)]
+                 
+                 # Add base item
+                 self._add_to_inventory(to_take)
+                 
+                 # Bonus Yield (Magic clone)
+                 if multiplier > 1:
+                     count = multiplier - 1
+                     for _ in range(count):
+                         self._add_to_inventory(to_take) # Adds by name stacking
+                         
+                 self.log_diary(f"Gathered {to_take.name} (x{multiplier}).")
+                 
+                 # 3. Terrain Degradation (Resource Depletion)
+                 # If we took Wood from Forest, it becomes Grass
+                 if to_take.name == "Wood":
+                     current_terrain = world.terrain_grid[self.y][self.x]
+                     if current_terrain == 3: # Forest
+                         world.terrain_grid[self.y][self.x] = 2 # Grass
+                         
+                 # If we took Stone from Mountain, well, mountains are big. 
+                 # But maybe if it was a surface rock, it's gone.
+                 # Let's say if we mine Stone, there's a small chance to degrade mountain? 
+                 # Or just remove the item is enough for now as per user request (stones disappear).
+                 # The item removal is handled by items.pop(0).
+                 pass
+            else:
+                 self.log_diary(f"Inventory full. Cannot gather {to_take.name}.")
 
     def can_pickup(self, item) -> bool:
         # Simple cap

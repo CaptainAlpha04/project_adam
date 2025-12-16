@@ -36,6 +36,28 @@ class Tribe:
     def set_goal(self, goal: str):
         self.goal = goal
 
+    def assess_needs(self):
+        """
+        Determines the tribe's current goal based on resource levels.
+        """
+        # 1. Food Security (Highest Priority)
+        # Goal: 5 food per member
+        if self.resources["food"] < len(self.members) * 5:
+            self.goal = "gather_food"
+            return
+
+        # 2. Material Security
+        if self.resources["wood"] < 10:
+            self.goal = "gather_wood"
+            return
+            
+        if self.resources["stone"] < 10:
+            self.goal = "gather_stone"
+            return
+            
+        # 3. Expansion
+        self.goal = "build_home" # Placeholder for future logic
+        
     def to_dict(self):
         return {
             "id": self.id,
