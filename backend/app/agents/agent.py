@@ -426,6 +426,7 @@ class Qalb:
         if has_stone: desires["Craft"] += 0.3
         if has_stone and tribe_goal == "build_home": desires["Craft"] += 0.4
         
+        desires["Build"] = 0.0
         if has_block: desires["Build"] += 0.4
         if has_block and tribe_goal == "build_home": desires["Build"] += 0.6
         
