@@ -11,6 +11,8 @@ class Tribe:
     members: List[str] = field(default_factory=list)
     color: str = "#ffffff"
     goal: str = "wander"
+    goal: str = "wander"
+    enemies: List[str] = field(default_factory=list) # List of Enemy Tribe IDs
     resources: Dict[str, int] = field(default_factory=lambda: {"food": 0, "wood": 0, "stone": 0})
     
     def __post_init__(self):
@@ -91,6 +93,14 @@ class Tribe:
         # 0 opinion -> 50 harmony
         harmony = (avg_opinion + 100) / 2
         return max(0.0, min(100.0, harmony))
+
+    def declare_war(self, target_tribe_id: str, world):
+        if target_tribe_id not in self.enemies:
+            self.enemies.append(target_tribe_id)
+            # Log
+            target = world.tribes.get(target_tribe_id)
+            target_name = target.name if target else "Unknown Tribe"
+            world.log_event(f"WAR: Tribe {self.name} has declared war on {target_name}!")
 
     def to_dict(self, world=None):
         harmony = 0.0

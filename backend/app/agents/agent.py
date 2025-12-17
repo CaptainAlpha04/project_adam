@@ -141,16 +141,30 @@ class Nafs:
     def update(self, world):
         # Biological Decay
         self.hunger += 0.002
+        self.hunger = min(1.0, self.hunger)
         self.energy -= 0.0002
         if self.agent.state.health > 0.8:
             self.lust += 0.005 # Grows faster than hunger if healthy
         
-        # Health Impact
-        if self.hunger > 0.8:
-            drain = 0.01 if self.hunger <= 0.95 else 0.05
-            self.agent.state.health -= drain
-            if np.random.random() < 0.05:
-                self.agent.log_diary("My stomach screams in agony.")
+        # --- HEALTH MECHANICS ---
+        
+        # 1. Starvation Damage
+        if self.hunger >= 1.0:
+            self.agent.state.health -= 0.02 # Fast death
+            if np.random.random() < 0.1: self.agent.log_diary("I am starving to death...")
+            
+        # 2. Regeneration (Well-fed & Rested)
+        if self.hunger < 0.3 and self.energy > 0.5:
+             self.agent.state.health += 0.005
+             self.agent.state.health = min(1.0, self.agent.state.health)
+             
+        # 3. Psychosomatic Effects
+        happiness = self.agent.state.happiness
+        if happiness < 0.2: # Depression
+             self.agent.state.health -= 0.001
+        elif happiness > 0.8: # Joy
+             self.agent.state.health += 0.002
+             self.agent.state.health = min(1.0, self.agent.state.health)
 
     def check_survival_instinct(self, world) -> Optional[Dict]:
         """
@@ -409,6 +423,43 @@ class Qalb:
             desires["Find Stone"] *= 0.1
             desires["Find Food"] *= 0.1
 
+        # 8. Violence (Aggression + Rivalry)
+        desires["Violence"] = 0.0
+        
+        # Base Aggression
+        if p["Aggression"] > 0.8: desires["Violence"] += 0.2
+        
+        # Check Neighbors for Rivals
+        nearest_rival = None
+        min_dist = 999
+        
+        for agent_id, state in self.agent.visible_agents_state.items():
+             op = self.opinions.get(agent_id, 0)
+             # Personal Rivalry
+             if op < -50:
+                 desires["Violence"] = max(desires["Violence"], 0.8)
+                 # Find object
+                 # (Limit: We only have IDs in visible_agents_state, need object for action target?)
+                 # Access world for object (Cheat/Efficiency)
+                 rival = world.agents.get(agent_id)
+                 if rival:
+                     d = self.agent.distance_to(rival)
+                     if d < min_dist:
+                         min_dist = d
+                         nearest_rival = rival
+                         
+        # Tribe War Check (To be implemented with Tribe updates)
+        if self.agent.attributes.tribe_id:
+            my_tribe = world.tribes.get(self.agent.attributes.tribe_id)
+            if my_tribe and hasattr(my_tribe, 'enemies'): # defensive check
+                 for enemies_tribe_id in my_tribe.enemies:
+                     # Check if any visible agent is in enemy tribe
+                     for agent_id, state in self.agent.visible_agents_state.items():
+                         if state.get('tribe_id') == enemies_tribe_id:
+                             desires["Violence"] = 1.0 # WAR!
+                             rival = world.agents.get(agent_id)
+                             if rival: nearest_rival = rival
+
         # --- ARBITRATION ---
         
         dominant_desire = max(desires, key=desires.get)
@@ -471,6 +522,12 @@ class Qalb:
              
         elif dominant_desire == "Trade":
              return {'action': 'social_trade', 'mode': 'barter', 'desc': "Looking to trade."}
+             
+        elif dominant_desire == "Violence":
+             if nearest_rival:
+                 return {'action': 'attack_agent', 'target': nearest_rival, 'desc': "Attacking rival!"}
+             else:
+                 return {'action': 'wander', 'desc': "Hunting for enemies."}
         
         # Default
         return {'action': 'wander', 'desc': "Contemplating existence."}
@@ -589,6 +646,11 @@ class Agent:
         """
         # 0. Cooldown Check (Busy)
         if self.state.busy_until > world.time_step:
+            return
+
+        # 0. Death Check
+        if self.state.health <= 0:
+            self.die(world)
             return
 
         self.state.age_steps += 1
@@ -732,6 +794,15 @@ class Agent:
              self.log_diary("Nobody to trade with.")
         elif action == 'socialize':
             self.qalb_socialize(world)
+            
+        elif action == 'attack_agent':
+             target = plan.get('target')
+             if target:
+                 dist = self.distance_to(target)
+                 if dist < 2.0:
+                     self.combat_logic(target, world)
+                 else:
+                     self.navigate_to(target.x, target.y, world)
         
         elif action == 'craft_item':
              # Simplified Crafting: Turn Stone -> Stone Block
@@ -1847,6 +1918,81 @@ class Agent:
         
         # Log to World
         world.log_trade(self, target, offer_item, request_item_name, mode)
+
+    def combat_logic(self, target, world):
+        """
+        Executes an attack on the target.
+        """
+        # 1. Damage Calculation
+        # Base damage based on Aggression and Strength (Energy/Health)
+        damage = 0.1 + (self.attributes.aggression * 0.1)
+        
+        # Weapon Bonus
+        has_weapon = False
+        for slot in self.inventory:
+            tags = slot['item'].get('tags', [])
+            if "weapon" in tags:
+                damage += 0.2
+                has_weapon = True
+                break
+            elif "tool" in tags: # Axe/Pickaxe
+                damage += 0.15
+                break
+        
+        # 2. Defense
+        # Reduced by target resilience/armor?
+        # Target Health Update
+        target.state.health -= damage
+        
+        # 3. Cost
+        self.nafs.energy -= 0.05
+        
+        # 4. Social Fallout
+        self.qalb.update_opinion(target.id, -20) # I hate you more
+        target.qalb.update_opinion(self.id, -50) # Target hates me for attacking
+        
+        # 5. Logging
+        weapon_str = " with weapon" if has_weapon else ""
+        self.log_diary(f"Attacked {target.attributes.name}{weapon_str}!")
+        target.log_diary(f"Attacked by {self.attributes.name}!")
+        
+        # Global Log if severe or kill
+        if target.state.health <= 0:
+            world.log_event(f"VIOLENCE: {self.attributes.name} KILLED {target.attributes.name}!")
+        else:
+             # Only log battles occasionally to avoid spam? Or always?
+             # User requested "Agent x killed agent y", minimal violence notification.
+             # Let's log significant hits?
+             pass 
+
+    def die(self, world):
+        """
+        Handles the death of the agent.
+        """
+        world.log_event(f"DEATH: {self.attributes.name} has died. (Age: {self.state.age_steps})")
+        
+        # 1. Drop Items? (Optional, let's keep it simple for now and delete them)
+        # Maybe drop a "Corpse" item?
+        
+        # 2. Remove from Tribe
+        if self.attributes.tribe_id:
+             tribe = world.tribes.get(self.attributes.tribe_id)
+             if tribe: tribe.remove_member(self.id)
+             
+        # 3. Remove from Partner
+        if self.attributes.partner_id:
+             partner = world.agents.get(self.attributes.partner_id)
+             if partner: 
+                 partner.attributes.partner_id = None
+                 partner.log_diary(f"My love {self.attributes.name} has died. I am broken.")
+                 partner.state.happiness = 0.0
+                 
+        # 4. Remove from World (This calls world.remove_agent usually, but we need to call it manually or let world handle it logic)
+        # World.remove_agent isn't exposed yet, we need to modify agents dict directly or better, use a world method.
+        # Let's assume world.agents.pop(self.id) is safe if we do it carefully.
+        # Better: Mark as dead and let World clean up? Or direct removal.
+        if self.id in world.agents:
+            del world.agents[self.id]
 
     # --- HELPERS ---
 
