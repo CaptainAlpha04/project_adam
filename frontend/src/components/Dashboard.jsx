@@ -207,6 +207,36 @@ const CharacterSheet = React.memo(({ agent, gameState, onSelectAgent, agentMap }
                             </div>
                         </div>
 
+                        {/* MIND (Brain) */}
+                        {agent.brain && (
+                            <div>
+                                <SectionHeader title="Mind & Plan" />
+                                <div className="bg-stone-900 border border-stone-700 rounded p-2 text-xs">
+                                    <div className="flex justify-between items-center mb-2">
+                                        <span className="text-stone-500 uppercase font-bold tracking-wider">Goal</span>
+                                        <span className={`font-bold ${agent.brain.current_goal === 'Prevent Starvation' ? 'text-red-400' : 'text-blue-300'}`}>
+                                            {agent.brain.current_goal || "Idle"}
+                                        </span>
+                                    </div>
+                                    <div className="space-y-1">
+                                        <span className="text-stone-500 uppercase font-bold tracking-wider block text-[10px]">Action Queue</span>
+                                        {agent.brain.action_queue && agent.brain.action_queue.length > 0 ? (
+                                            <div className="flex flex-col gap-1">
+                                                {agent.brain.action_queue.map((act, idx) => (
+                                                    <div key={idx} className="flex gap-2 items-center bg-stone-800/50 px-2 py-1 rounded">
+                                                        <span className="text-stone-600 font-mono text-[10px]">{idx + 1}.</span>
+                                                        <span className="text-stone-300">{act}</span>
+                                                    </div>
+                                                ))}
+                                            </div>
+                                        ) : (
+                                            <div className="text-stone-600 italic">No specific plan.</div>
+                                        )}
+                                    </div>
+                                </div>
+                            </div>
+                        )}
+
                         {/* Chronicle */}
                         <div>
                             <SectionHeader title="Chronicle" />
@@ -316,108 +346,112 @@ const CharacterSheet = React.memo(({ agent, gameState, onSelectAgent, agentMap }
                 )}
 
                 {/* TRIBE TAB */}
-                {tab === 'tribe' && (
-                    <div className="space-y-4">
-                        <div className="p-4 bg-stone-800/40 rounded border border-stone-600 flex flex-col items-center">
-                            <div className="w-16 h-16 rounded-full border-4 border-yellow-600 shadow-xl mb-2 flex items-center justify-center bg-stone-900" style={{ borderColor: agent.attributes.tribe_color || '#d97706' }}>
-                                <span className="text-2xl">🚩</span>
-                            </div>
-                            <h2 className="text-xl font-serif font-bold text-yellow-100">{agent.tribe_name}</h2>
-                            <span className="text-xs text-stone-400 uppercase tracking-widest mt-1">Goal: {agent.tribe_goal.replace('_', ' ')}</span>
-                        </div>
-
-                        {/* NOMAD CHECK - Don't cluster Nomads */}
-                        {(!agent.attributes.tribe_id || agent.tribe_name === "Nomad") ? (
-                            <div className="text-center p-8 text-stone-500 italic border border-stone-800 rounded bg-stone-900/50">
-                                <p>"The world is your home. You walk alone, bound by no chief."</p>
-                            </div>
-                        ) : (
-                            <>
-                                {/* Harmony Meter */}
-                                <div className="bg-stone-900/80 p-3 rounded border border-stone-800">
-                                    <div className="flex justify-between items-end mb-1">
-                                        <span className="text-xs text-stone-500 font-bold uppercase">Tribe Harmony</span>
-                                        <span className={`text-lg font-bold ${(!agent.tribe_harmony || agent.tribe_harmony < 50) ? 'text-red-400' : 'text-green-400'}`}>
-                                            {(agent.tribe_harmony || 50).toFixed(0)}%
-                                        </span>
-                                    </div>
-                                    <div className="w-full h-2 bg-stone-800 rounded-full overflow-hidden">
-                                        <div
-                                            className={`h-full transition-all duration-500 ${(!agent.tribe_harmony || agent.tribe_harmony < 50) ? 'bg-red-600' : 'bg-green-600'}`}
-                                            style={{ width: `${agent.tribe_harmony || 50}%` }}
-                                        ></div>
-                                    </div>
-                                    <p className="text-[10px] text-stone-500 mt-2 italic text-center">
-                                        {(!agent.tribe_harmony || agent.tribe_harmony < 50) ? "Discord breeds chaos and rebellion." : "Unity is strength."}
-                                    </p>
+                {
+                    tab === 'tribe' && (
+                        <div className="space-y-4">
+                            <div className="p-4 bg-stone-800/40 rounded border border-stone-600 flex flex-col items-center">
+                                <div className="w-16 h-16 rounded-full border-4 border-yellow-600 shadow-xl mb-2 flex items-center justify-center bg-stone-900" style={{ borderColor: agent.attributes.tribe_color || '#d97706' }}>
+                                    <span className="text-2xl">🚩</span>
                                 </div>
+                                <h2 className="text-xl font-serif font-bold text-yellow-100">{agent.tribe_name}</h2>
+                                <span className="text-xs text-stone-400 uppercase tracking-widest mt-1">Goal: {agent.tribe_goal.replace('_', ' ')}</span>
+                            </div>
 
-                                {/* Tribe Members */}
-                                <div>
-                                    <SectionHeader title="Tribesmen" />
-                                    <div className="flex flex-wrap gap-2">
-                                        {gameState.agents
-                                            .filter(a => a.attributes.tribe_id === agent.attributes.tribe_id)
-                                            .map(member => (
-                                                <button
-                                                    key={member.id}
-                                                    onClick={() => onSelectAgent(member.id)}
-                                                    className={`flex items-center gap-2 bg-stone-800 px-2 py-1 rounded border border-stone-700 hover:bg-stone-700 transition-colors ${member.id === agent.attributes.leader_id ? 'border-yellow-500/50' : ''}`}
-                                                >
-                                                    <span className="text-lg">{member.attributes.gender === 'male' ? '🧔' : '👩'}</span>
-                                                    <div className="flex flex-col items-start">
-                                                        <span className={`text-xs font-bold ${member.id === agent.id ? 'text-yellow-200' : 'text-stone-300'}`}>
-                                                            {member.attributes.name}
-                                                            {member.id === agent.attributes.leader_id && <span className="text-yellow-500 ml-1">👑</span>}
-                                                        </span>
-                                                        <span className="text-[9px] text-stone-500 uppercase">{member.attributes.job}</span>
-                                                    </div>
-                                                </button>
-                                            ))
-                                        }
-                                    </div>
+                            {/* NOMAD CHECK - Don't cluster Nomads */}
+                            {(!agent.attributes.tribe_id || agent.tribe_name === "Nomad") ? (
+                                <div className="text-center p-8 text-stone-500 italic border border-stone-800 rounded bg-stone-900/50">
+                                    <p>"The world is your home. You walk alone, bound by no chief."</p>
                                 </div>
-                            </>
-                        )}
-                    </div>
-                )}
+                            ) : (
+                                <>
+                                    {/* Harmony Meter */}
+                                    <div className="bg-stone-900/80 p-3 rounded border border-stone-800">
+                                        <div className="flex justify-between items-end mb-1">
+                                            <span className="text-xs text-stone-500 font-bold uppercase">Tribe Harmony</span>
+                                            <span className={`text-lg font-bold ${(!agent.tribe_harmony || agent.tribe_harmony < 50) ? 'text-red-400' : 'text-green-400'}`}>
+                                                {(agent.tribe_harmony || 50).toFixed(0)}%
+                                            </span>
+                                        </div>
+                                        <div className="w-full h-2 bg-stone-800 rounded-full overflow-hidden">
+                                            <div
+                                                className={`h-full transition-all duration-500 ${(!agent.tribe_harmony || agent.tribe_harmony < 50) ? 'bg-red-600' : 'bg-green-600'}`}
+                                                style={{ width: `${agent.tribe_harmony || 50}%` }}
+                                            ></div>
+                                        </div>
+                                        <p className="text-[10px] text-stone-500 mt-2 italic text-center">
+                                            {(!agent.tribe_harmony || agent.tribe_harmony < 50) ? "Discord breeds chaos and rebellion." : "Unity is strength."}
+                                        </p>
+                                    </div>
 
-                {/* INVENTORY TAB */}
-                {tab === 'inventory' && (
-                    <div className="space-y-4">
-                        <div>
-                            <SectionHeader title="Possessions" />
-                            <div className="grid grid-cols-4 gap-2">
-                                {agent.inventory.map((slot, i) => (
-                                    <div key={i} className="bg-stone-800 p-2 rounded border border-stone-600 flex flex-col items-center gap-1 hover:bg-stone-700 transition-colors" title={slot.item.name}>
-                                        <div className="w-8 h-8 flex items-center justify-center text-xl bg-stone-900 rounded-full border border-stone-700">
-                                            {slot.item.name.includes("Wood") ? "🪵" :
-                                                slot.item.name.includes("Stone") ? "🪨" :
-                                                    slot.item.name.includes("Food") || slot.item.name.includes("Fruit") ? "🍎" :
-                                                        slot.item.name.includes("Wall") ? "🧱" : "📦"
+                                    {/* Tribe Members */}
+                                    <div>
+                                        <SectionHeader title="Tribesmen" />
+                                        <div className="flex flex-wrap gap-2">
+                                            {gameState.agents
+                                                .filter(a => a.attributes.tribe_id === agent.attributes.tribe_id)
+                                                .map(member => (
+                                                    <button
+                                                        key={member.id}
+                                                        onClick={() => onSelectAgent(member.id)}
+                                                        className={`flex items-center gap-2 bg-stone-800 px-2 py-1 rounded border border-stone-700 hover:bg-stone-700 transition-colors ${member.id === agent.attributes.leader_id ? 'border-yellow-500/50' : ''}`}
+                                                    >
+                                                        <span className="text-lg">{member.attributes.gender === 'male' ? '🧔' : '👩'}</span>
+                                                        <div className="flex flex-col items-start">
+                                                            <span className={`text-xs font-bold ${member.id === agent.id ? 'text-yellow-200' : 'text-stone-300'}`}>
+                                                                {member.attributes.name}
+                                                                {member.id === agent.attributes.leader_id && <span className="text-yellow-500 ml-1">👑</span>}
+                                                            </span>
+                                                            <span className="text-[9px] text-stone-500 uppercase">{member.attributes.job}</span>
+                                                        </div>
+                                                    </button>
+                                                ))
                                             }
                                         </div>
-                                        <span className="text-[10px] font-bold text-center leading-tight">{slot.item.name}</span>
-                                        <span className="text-xs text-yellow-500 font-mono">x{slot.count}</span>
                                     </div>
-                                ))}
-                                {agent.inventory.length === 0 && <div className="col-span-4 text-center py-4 text-stone-500 italic">Inventory is empty</div>}
-                            </div>
+                                </>
+                            )}
                         </div>
+                    )
+                }
 
-                        <div>
-                            <SectionHeader title="Knowledge" />
-                            <div className="flex flex-wrap gap-1">
-                                {/* Mock knowledge for now, can be populated from backend later */}
-                                <span className="px-2 py-1 bg-stone-800 rounded border border-stone-700 text-xs text-blue-300">Basic Survival</span>
-                                {agent.attributes.job === 'Builder' && <span className="px-2 py-1 bg-stone-800 rounded border border-stone-700 text-xs text-orange-300">Construction</span>}
-                                {agent.attributes.job === 'Shaman' && <span className="px-2 py-1 bg-stone-800 rounded border border-stone-700 text-xs text-purple-300">Mysticism</span>}
+                {/* INVENTORY TAB */}
+                {
+                    tab === 'inventory' && (
+                        <div className="space-y-4">
+                            <div>
+                                <SectionHeader title="Possessions" />
+                                <div className="grid grid-cols-4 gap-2">
+                                    {agent.inventory.map((slot, i) => (
+                                        <div key={i} className="bg-stone-800 p-2 rounded border border-stone-600 flex flex-col items-center gap-1 hover:bg-stone-700 transition-colors" title={slot.item.name}>
+                                            <div className="w-8 h-8 flex items-center justify-center text-xl bg-stone-900 rounded-full border border-stone-700">
+                                                {slot.item.name.includes("Wood") ? "🪵" :
+                                                    slot.item.name.includes("Stone") ? "🪨" :
+                                                        slot.item.name.includes("Food") || slot.item.name.includes("Fruit") ? "🍎" :
+                                                            slot.item.name.includes("Wall") ? "🧱" : "📦"
+                                                }
+                                            </div>
+                                            <span className="text-[10px] font-bold text-center leading-tight">{slot.item.name}</span>
+                                            <span className="text-xs text-yellow-500 font-mono">x{slot.count}</span>
+                                        </div>
+                                    ))}
+                                    {agent.inventory.length === 0 && <div className="col-span-4 text-center py-4 text-stone-500 italic">Inventory is empty</div>}
+                                </div>
+                            </div>
+
+                            <div>
+                                <SectionHeader title="Knowledge" />
+                                <div className="flex flex-wrap gap-1">
+                                    {/* Mock knowledge for now, can be populated from backend later */}
+                                    <span className="px-2 py-1 bg-stone-800 rounded border border-stone-700 text-xs text-blue-300">Basic Survival</span>
+                                    {agent.attributes.job === 'Builder' && <span className="px-2 py-1 bg-stone-800 rounded border border-stone-700 text-xs text-orange-300">Construction</span>}
+                                    {agent.attributes.job === 'Shaman' && <span className="px-2 py-1 bg-stone-800 rounded border border-stone-700 text-xs text-purple-300">Mysticism</span>}
+                                </div>
                             </div>
                         </div>
-                    </div>
-                )}
-            </div>
-        </div>
+                    )
+                }
+            </div >
+        </div >
     );
 });
 

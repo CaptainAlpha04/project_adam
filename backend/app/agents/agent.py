@@ -3,6 +3,7 @@ from typing import List, Dict, Any, Optional
 import uuid
 import numpy as np
 from enum import Enum
+from .brain import AgentBrain
 
 # --- Enums & Constants ---
 
@@ -166,6 +167,17 @@ class Nafs:
              self.agent.state.health += 0.002
              self.agent.state.health = min(1.0, self.agent.state.health)
 
+    def check_survival_eating(self) -> bool:
+        """
+        Auto-Eat logic for multitasking.
+        If starving (>0.8) and has food, eat immediately as a free action.
+        """
+        if self.hunger > 0.8:
+            if self.agent.eat_from_inventory():
+                # self.agent.log_diary("Ate ration on the run.") # Too spammy?
+                return True
+        return False
+
     def check_survival_instinct(self, world) -> Optional[Dict]:
         """
         Overrides higher functions if immediate survival is threatened.
@@ -226,7 +238,40 @@ class Qalb:
         if self.agent.state.happiness > 0.7: self.emotional_state = "Happy"
         elif self.agent.state.happiness < 0.3: self.emotional_state = "Depressed"
         elif self.social < 0.2: self.emotional_state = "Lonely"
+        elif self.social < 0.2: self.emotional_state = "Lonely"
         else: self.emotional_state = "Neutral"
+
+    def check_passive_social(self, world):
+        """
+        Multitasking Logic (Philosophy Ch 21).
+        Allows socializing while performing other actions (Walking/Gathering).
+        """
+        # Quick proximity check
+        for other_id, state in self.agent.visible_agents_state.items():
+            other = world.agents.get(other_id)
+            if not other: continue
+            
+            dist = self.agent.distance_to(other)
+            if dist < 3.0:
+                # Passive Interaction
+                # 1. Update Social Battery
+                self.social = min(1.0, self.social + 0.005)
+                # self.agent.state.happiness is not directly accessible if self.agent.state is a dataclass?
+                # Yes it is: self.agent.state.happiness
+                self.agent.state.happiness = min(1.0, self.agent.state.happiness + 0.002)
+                
+                # 2. Update Opinion (Exposure Effect)
+                # Helper update_opinion might be in Qalb? 
+                # Let's check Qalb methods. It used to be in Agent.
+                # If Qalb has opinions dict, it should manage it.
+                # Lines 203: self.opinions = {}
+                # I need to ensure update_opinion exists in Qalb or implement it here.
+                current_op = self.opinions.get(other_id, 0)
+                self.opinions[other_id] = min(100, current_op + 0.1)
+                
+                # 3. Log occasionally
+                if np.random.random() < 0.05:
+                    self.agent.log_diary(f"Chatting with {other.attributes.name} while working.")
 
     def propose_action(self, world) -> Dict:
         """
@@ -612,10 +657,11 @@ class Agent:
             'agent': []
         }
         
-        # TRI-PARTITE SYSTEM
+        # Internal Systems
         self.nafs = Nafs(self)
         self.qalb = Qalb(self)
         self.ruh = Ruh(self, soul)
+        self.brain = AgentBrain(self)
         
         # Initialize attributes
         self.attributes.curiosity = p_vector["Curiosity"]
@@ -684,22 +730,39 @@ class Agent:
                  self.state.social_lock_steps = 0
                  self.log_diary("Social connection lost (distance).")
 
-        # 3. Decision Pipeline
+        # 2. Decision Making (TRI-PARTITE SYSTEM)
+        action_plan = None
         
+        # --- OPPORTUNISTIC INTELLIGENCE ---
+        # Free Actions that run parallel to main plan
+        self.check_opportunistic_gathering(world)
+        self.nafs.check_survival_eating()
+
         # A. Nafs Override (Survival Instinct)
         action_plan = self.nafs.check_survival_instinct(world)
         
         if action_plan:
              self.log_diary(f"DEBUG: Nafs Override {action_plan['action']}")
-        
-        # B. Qalb Proposal (Rational/Social Mind)
+    
+        # B. Brain Planning (Long-term)
+        if not action_plan:
+            action_plan = self.brain.get_next_action(world)
+            if action_plan:
+                 self.log_diary(f"BRAIN: Executing plan {action_plan['action']}")
+
+        # C. Qalb Proposal (Rational/Social Mind)
         if not action_plan:
             action_plan = self.qalb.propose_action(world)
             
-            # C. Ruh Review (Spiritual Veto/Modifier)
+            # D. Ruh Review (Spiritual Veto/Modifier)
             action_plan = self.ruh.review_plan(action_plan, world)
             
-        # 4. Execution
+        # 4. Multitasking (Philosophy Ch 21)
+        # Always run social checks passively if not sleeping/dead
+        if action_plan and action_plan['action'] != 'sleep':
+            self.qalb.check_passive_social(world)
+
+        # 5. Execution
         self.execute_action(action_plan, world)
         
     def execute_action(self, plan: Dict, world):
@@ -729,7 +792,15 @@ class Agent:
             res_type = plan.get('resource')
             # Check Memory
             target = None
-            mem_type = res_type # Direct mapping: 'wood', 'stone', 'food'
+            
+            # Map Brain Types to Memory Types
+            mem_type = res_type.lower()
+            if mem_type in ['consumable', 'fruit', 'berry', 'food']:
+                mem_type = 'food'
+            elif mem_type in ['rock', 'stone']:
+                mem_type = 'stone'
+            elif mem_type in ['tree', 'wood']:
+                mem_type = 'wood'
             
             knowns = self.spatial_memory.get(mem_type, [])
             if knowns:
@@ -739,17 +810,18 @@ class Agent:
                 target = knowns[0]
                 
                 # Go there
-                if (target[0]-self.x)**2 + (target[1]-self.y)**2 < 2:
+                # Go there
+                dist_sq = (target[0]-self.x)**2 + (target[1]-self.y)**2
+                
+                if dist_sq == 0:
+                    # On top: Gather!
                     self.gather(world)
                     # If empty, remove from memory
                     if target not in world.items_grid:
-                        knowns.pop(0)
-                        self.move_random(world)
+                        knowns.pop(0) # Remove from memory
+                        # We are done with this step, wait for next decision
                 else:
-                    # dx, dy = target[0] - self.x, target[1] - self.y
-                    # mx = 1 if dx > 0 else -1 if dx < 0 else 0
-                    # my = 1 if dy > 0 else -1 if dy < 0 else 0
-                    # world.move_agent(self.id, mx, my)
+                    # Move towards
                     self.navigate_to(target[0], target[1], world)
             else:
                 # Explore (Smart Wander)
@@ -825,6 +897,14 @@ class Agent:
              else:
                  self.log_diary("Failed to craft: No Stone.")
                  
+        elif action == 'eat_from_inventory':
+             # Try to eat
+             if not self.eat_from_inventory():
+                 self.log_diary("Plan Failed: No Food.")
+                 # Clear Brain Plan if failed?
+                 self.brain.action_queue = []
+                 self.brain.current_goal = "Plan Failed"
+
         elif action == 'build_structure':
              # Place Wall
              items = [s for s in self.inventory if s['item']['name'] == 'Stone Block']
@@ -1296,6 +1376,29 @@ class Agent:
                 return True
         return False
         
+    def check_opportunistic_gathering(self, world):
+        """
+        If we are standing on something useful, pick it up (Free Action).
+        """
+        items = world.items_grid.get((self.x, self.y))
+        if not items: return
+        
+        item = items[0] # Peek
+        should_gather = False
+        
+        # Logic: Always gather construction mats
+        if item.name in ["Wood", "Stone"]:
+            should_gather = True
+        
+        # Logic: Gather food if hungry or inventory space exists
+        elif "consumable" in item.tags:
+            if self.nafs.hunger > 0.4 or self.attributes.personality_vector["Survival"] > 0.6:
+                should_gather = True
+                
+        if should_gather:
+            if sum(s['count'] for s in self.inventory) < 20:
+                self.gather(world)
+
     def qalb_socialize(self, world):
         """
         Complex Social Logic: Hierarchy, Herding, and Chat Loops.
@@ -1387,16 +1490,12 @@ class Agent:
             self.log_diary(f"Locked social with {nearest.attributes.name}.")
             self.process_social_loop(world) # Do first step now
             return
+
         else:
             # Approach Logic
             self.log_diary(f"Approaching {nearest.attributes.name} ({nearest_dist:.1f})")
             # Move towards logic is handled below in 'Herding' but we should ensure we move TO them if we want to socialize
             # Force strict movement to Nearest if intending to socialize
-            # dx = nearest.x - self.x
-            # dy = nearest.y - self.y
-            # mx = 1 if dx > 0 else -1 if dx < 0 else 0
-            # my = 1 if dy > 0 else -1 if dy < 0 else 0
-            # world.move_agent(self.id, mx, my)
             self.navigate_to(nearest.x, nearest.y, world)
             return
 
@@ -2074,7 +2173,8 @@ class Agent:
             "tribe_name": world.tribes[self.attributes.tribe_id].name if world and self.attributes.tribe_id and self.attributes.tribe_id in world.tribes else "Nomad",
             "tribe_goal": world.tribes[self.attributes.tribe_id].goal if world and self.attributes.tribe_id and self.attributes.tribe_id in world.tribes else "wander",
             "tribe_harmony": world.tribes[self.attributes.tribe_id].calculate_harmony(world) if world and self.attributes.tribe_id and self.attributes.tribe_id in world.tribes else 50.0,
-            "generation": self.attributes.generation
+            "generation": self.attributes.generation,
+            "brain": self.brain.to_dict()
         }
     
     def get_observation(self, world):
