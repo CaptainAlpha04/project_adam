@@ -2,10 +2,9 @@ import React, { useState, useEffect } from 'react';
 import MapCanvas from './components/MapCanvas';
 import Dashboard from './components/Dashboard';
 import TrainingCenter from './components/Training/TrainingCenter';
-import ConfigMenu from './components/ConfigMenu';
 
 function App() {
-  const [view, setView] = useState('menu'); // Default to menu
+  const [view, setView] = useState('simulation'); // simulation as default
   const [gameState, setGameState] = useState(null);
   const [connected, setConnected] = useState(false);
   const [selectedAgentId, setSelectedAgentId] = useState(null);
@@ -45,15 +44,9 @@ function App() {
     }
   };
 
-  const handleSimulationStart = () => {
-    setView('simulation');
-  };
-
   return (
     <div className="w-full h-screen bg-black overflow-hidden relative">
-      {view === 'menu' ? (
-        <ConfigMenu onStart={handleSimulationStart} />
-      ) : view === 'simulation' ? (
+      {view === 'simulation' ? (
         <>
           {/* Layer 1: The World (Canvas) */}
           <div className="absolute inset-0 z-0">
@@ -84,12 +77,6 @@ function App() {
               >
                 Go to Training
               </button>
-              <button
-                onClick={() => setView('menu')}
-                className="ml-2 bg-stone-800 text-stone-500 hover:text-white px-2 py-1 text-xs border border-stone-600 rounded opacity-50 hover:opacity-100 transition-opacity"
-              >
-                Back to Menu
-              </button>
             </div>
           </div>
         </>
@@ -118,4 +105,3 @@ function App() {
 }
 
 export default App;
-

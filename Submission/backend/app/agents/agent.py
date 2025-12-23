@@ -141,11 +141,7 @@ class Nafs:
         
     def update(self, world):
         # Biological Decay
-        decay_rate = 0.002
-        if hasattr(world, 'config') and world.config:
-            decay_rate = world.config.get("hunger_rate", 0.002)
-        
-        self.hunger += decay_rate
+        self.hunger += 0.002
         self.hunger = min(1.0, self.hunger)
         self.energy -= 0.0002
         if self.agent.state.health > 0.8:
