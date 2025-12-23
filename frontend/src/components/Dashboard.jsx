@@ -593,27 +593,39 @@ const Dashboard = ({ gameState, onSelectAgent, selectedAgentId, onTogglePause, m
         lastLogCountRef.current = logs.length;
     }, [gameState?.logs]); // Only run when logs change
 
-    const selectedAgent = useMemo(() =>
-        gameState && gameState.agents ? gameState.agents.find(a => a.id === selectedAgentId) : null,
-        [gameState, selectedAgentId]);
+    if (!gameState) return <div className="flex items-center justify-center h-full text-yellow-500 bg-stone-900 font-serif">Waiting for Neural Link...</div>;
 
-    // Memoize agent lookup map for O(1) access
+    const selectedAgent = useMemo(() => {
+        if (!selectedAgentId || !gameState.agents) return null;
+        return gameState.agents.find(a => a.id === selectedAgentId);
+    }, [gameState, selectedAgentId]);
+
     const agentMap = useMemo(() => {
-        if (!gameState || !gameState.agents) return {};
+        if (!gameState.agents) return {};
         return gameState.agents.reduce((acc, agent) => {
             acc[agent.id] = agent;
             return acc;
         }, {});
     }, [gameState?.agents]);
 
-    if (!gameState) return <div className="absolute top-0 left-0 text-yellow-500 font-serif p-4">Loading World State...</div>;
-
     return (
-        <div className="absolute inset-0 pointer-events-none w-full h-full overflow-hidden font-sans selection:bg-yellow-900 selection:text-white">
+        <div className="absolute inset-0 flex flex-col pointer-events-none">
+            {/* Top Bar */}
             <TopBar gameState={gameState} onTogglePause={onTogglePause} />
-            <NotificationContainer notifications={notifications} />
-            <AgentList agents={gameState.agents} selectedAgentId={selectedAgentId} onSelectAgent={onSelectAgent} />
+
+            {/* Main Area */}
+            <div className="flex-1 relative flex overflow-hidden">
+                {/* Left: Notifications (Absolute) */}
+                <NotificationContainer notifications={notifications} />
+
+                {/* Right: Agent List */}
+                <AgentList agents={gameState.agents || []} selectedAgentId={selectedAgentId} onSelectAgent={onSelectAgent} />
+            </div>
+
+            {/* Bottom: Map Mode Selector */}
             <MapModeSelector mapMode={mapMode} setMapMode={setMapMode} />
+
+            {/* Absolute: Character Sheet (Right Side) */}
             <CharacterSheet agent={selectedAgent} gameState={gameState} onSelectAgent={onSelectAgent} agentMap={agentMap} />
         </div>
     );

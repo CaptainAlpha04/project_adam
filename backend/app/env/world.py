@@ -249,6 +249,7 @@ class World:
         return True
 
 
+    def get_state(self):
         """Returns a simplified state representation for the frontend."""
         # Day/Night Cycle (Scale: 1 day = 24 steps? No, let's say 1000 steps = 1 day)
         # 0-500: Day, 500-1000: Night
@@ -439,5 +440,5 @@ class World:
     def _get_agent_at(self, x, y):
         for a in self.agents.values():
             if int(a.x) == x and int(a.y) == y:
-                return a
+                return a.id
         return None

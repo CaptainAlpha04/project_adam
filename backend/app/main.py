@@ -52,16 +52,11 @@ SIMULATION_SPEED = 0.1
 
 # Initialize World (Empty initially or default)
 world = World(width=200, height=200)
-# Initialize Default Agents
-for i in range(10):
-    gender = "male" if i % 2 == 0 else "female"
-    agent = Agent(x=np.random.randint(0, 50), y=np.random.randint(0, 50), gender=gender)
-    if os.path.exists("adam_soul_movement.zip"): agent.load_brain("adam_soul_movement")
-    elif os.path.exists("adam_soul.zip"): agent.load_brain("adam_soul")
-    world.add_agent(agent)
-# Initialize Default Animals
-for i in range(20): world.animals.append(Animal(x=np.random.randint(0, 50), y=np.random.randint(0, 50), type='herbivore'))
-for i in range(5): world.animals.append(Animal(x=np.random.randint(0, 50), y=np.random.randint(0, 50), type='carnivore'))
+# Initialize World (Empty initially)
+world = World(width=200, height=200)
+
+# Default Agents/Animals are NOT spawned effectively until /init_world is called.
+
 
 class WorldConfig(BaseModel):
     hunger_rate: float = 0.002
@@ -71,7 +66,12 @@ class WorldConfig(BaseModel):
 @app.post("/init_world")
 def init_world(config: WorldConfig):
     global world
-    print(f"Initializing World with Config: {config}")
+    print("\n" + "="*50)
+    print(f"🌍 RECEIVING GENESIS CONFIGURATION FROM FRONTEND 🌍")
+    print(f"   - Initial Agents: {config.initial_agent_count}")
+    print(f"   - Hunger Rate:    {config.hunger_rate}")
+    print(f"   - Resource Rate:  {config.resource_growth_rate}")
+    print("="*50 + "\n")
     
     # 1. Create New World
     world = World(width=200, height=200, config=config.dict())

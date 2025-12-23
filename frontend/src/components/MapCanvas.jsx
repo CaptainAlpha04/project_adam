@@ -40,6 +40,8 @@ const MapCanvas = ({ gameState, selectedAgentId, onSelectAgent, mapMode = 'TERRA
   };
 
   useEffect(() => {
+    if (!gameState) return;
+
     const canvas = canvasRef.current;
     if (!canvas) return;
     const ctx = canvas.getContext('2d', { alpha: false }); // Optimize

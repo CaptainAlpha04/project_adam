@@ -31,7 +31,7 @@ function App() {
       socket.onclose = () => {
         console.log('Disconnected');
         setConnected(false);
-        // setTimeout(connect, 3000); // Auto-reconnect
+        setTimeout(connect, 3000); // Auto-reconnect
       };
       return socket;
     }
