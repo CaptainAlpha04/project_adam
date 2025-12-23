@@ -24,9 +24,9 @@ MANIFEST
 # Virtual Environment
 venv/
 
-ENV/
-.env
+
 .venv
+logs/
 
 # Node.js / Frontend
 frontend/node_modules/
@@ -50,3 +50,12 @@ frontend/yarn-error.log*
 # OS
 .DS_Store
 Thumbs.db
+
+# zip files
+*.zip
+*.tar.gz
+*.tar.bz2
+*.tar
+adam_soul_movement.zip
+adam_soul_social.zip
+

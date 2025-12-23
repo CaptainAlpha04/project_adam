@@ -45,55 +45,37 @@ app.add_middleware(
 # Mount Training Router
 app.include_router(training_router)
 
-from pydantic import BaseModel
-
 # Global Simulation Speed (seconds per tick)
 SIMULATION_SPEED = 0.1
 
-# Initialize World (Empty initially or default)
+# Initialize World
 world = World(width=200, height=200)
-# Initialize Default Agents
+
+# Add some initial agents
 for i in range(10):
+    # Enforce 50/50 split for initial population
     gender = "male" if i % 2 == 0 else "female"
     agent = Agent(x=np.random.randint(0, 50), y=np.random.randint(0, 50), gender=gender)
-    if os.path.exists("adam_soul_movement.zip"): agent.load_brain("adam_soul_movement")
-    elif os.path.exists("adam_soul.zip"): agent.load_brain("adam_soul")
+    
+    # Try to load a brain (movement default)
+    import os
+    if os.path.exists("adam_soul_movement.zip"):
+        agent.load_brain("adam_soul_movement")
+    elif os.path.exists("adam_soul.zip"):
+         agent.load_brain("adam_soul")
+         
     world.add_agent(agent)
-# Initialize Default Animals
-for i in range(20): world.animals.append(Animal(x=np.random.randint(0, 50), y=np.random.randint(0, 50), type='herbivore'))
-for i in range(5): world.animals.append(Animal(x=np.random.randint(0, 50), y=np.random.randint(0, 50), type='carnivore'))
 
-class WorldConfig(BaseModel):
-    hunger_rate: float = 0.002
-    resource_growth_rate: float = 1.0
-    initial_agent_count: int = 10
-
-@app.post("/init_world")
-def init_world(config: WorldConfig):
-    global world
-    print(f"Initializing World with Config: {config}")
+# Add animals
+for i in range(20):
+    # Herbivores
+    h = Animal(x=np.random.randint(0, 50), y=np.random.randint(0, 50), type='herbivore')
+    world.animals.append(h)
     
-    # 1. Create New World
-    world = World(width=200, height=200, config=config.dict())
-    
-    # 2. Spawn Agents
-    count = config.initial_agent_count
-    for i in range(count):
-        gender = "male" if i % 2 == 0 else "female"
-        # Spawn near center/random
-        agent = Agent(x=np.random.randint(0, 200), y=np.random.randint(0, 200), gender=gender)
-        
-        # Load logic
-        if os.path.exists("adam_soul_movement.zip"): agent.load_brain("adam_soul_movement")
-        elif os.path.exists("adam_soul.zip"): agent.load_brain("adam_soul")
-            
-        world.add_agent(agent)
-        
-    # 3. Spawn Animals (Default count for now)
-    for i in range(20): world.animals.append(Animal(x=np.random.randint(0, 200), y=np.random.randint(0, 200), type='herbivore'))
-    for i in range(5): world.animals.append(Animal(x=np.random.randint(0, 200), y=np.random.randint(0, 200), type='carnivore'))
-    
-    return {"message": "World Initialized", "config": config.dict()}
+for i in range(5):
+    # Carnivores
+    c = Animal(x=np.random.randint(0, 50), y=np.random.randint(0, 50), type='carnivore')
+    world.animals.append(c)
 
 # Note: WebSocket endpoint for main simulation remains, but Socket.IO handles training updates.
 
